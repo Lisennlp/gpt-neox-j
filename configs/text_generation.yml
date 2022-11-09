@@ -1,0 +1,20 @@
+# Parameters used for text generation
+# Make sure `load` is specified somewhere else
+{
+  # Text gen type: `input-file`, `unconditional` or `interactive`
+  "text-gen-type": "input-file",
+
+  # Params for all
+  "maximum_tokens": 102,
+  "temperature": 0,
+  "top_p": 0,
+  "top_k": 0,
+  "recompute": True,
+
+  # `unconditional`: samples
+  "num-samples": 3,
+
+  # input/output file
+  "sample-input-file": "input_file2.txt",
+  "sample-output-file": "sample_output2.txt",
+}
