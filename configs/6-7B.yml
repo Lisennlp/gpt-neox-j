@@ -1,6 +1,7 @@
 # GPT-2 pretraining setup
 {
   ##### gptj_configs, gxh  #####
+  "gpt_j_residual": true,
   "world_size": 8,
   "global_num_gpus": 8,
   "n_embd": 4096,    
@@ -54,7 +55,7 @@
   },
 
    # batch / data settings
-   "train_micro_batch_size_per_gpu": 1,
+   "train_micro_batch_size_per_gpu": 4,
    "data-impl": "mmap",
    "split": "949,50,1",
 

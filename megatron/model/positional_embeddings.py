@@ -37,10 +37,13 @@ class RotaryEmbedding(torch.nn.Module):
         if seq_len != self.seq_len_cached:
             self.seq_len_cached = seq_len
             t = torch.arange(seq_len, device=x.device).type_as(self.inv_freq)
+            # 每个位置对应一个inv_freq， len x (dim / 2)
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            # len x dim 
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
             if self.precision == torch.bfloat16:
                 emb = emb.float()
+            # len x dim
             self.cos_cached = emb.cos()[:, None, None, :]
             self.sin_cached = emb.sin()[:, None, None, :]
             if self.precision == torch.bfloat16:
@@ -53,20 +56,46 @@ class RotaryEmbedding(torch.nn.Module):
 
 
 def rotate_half(x):
+    # huggingface采用每隔1个位置取一个，而neox是前半和后半
     x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
     return torch.cat(
         (-x2, x1), dim=x1.ndim - 1
     )  # dim=-1 triggers a bug in earlier torch versions
 
 
-@torch.jit.script
-def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos, sin = (
-        cos[offset : q.shape[0] + offset, ...],
-        sin[offset : q.shape[0] + offset, ...],
-    )
-    return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
+# @torch.jit.script
+# def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
+#     cos, sin = (
+#         cos[offset : q.shape[0] + offset, ...],
+#         sin[offset : q.shape[0] + offset, ...],
+#     )
+#     return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
 
+# huggingface @lsp ==================
+
+def duplicate_interleave(m):
+    """
+    A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
+    """
+    dim0 = m.shape[0]
+    m = m.view(-1, 1)  # flatten the matrix
+    m = m.repeat(1, 2)  # repeat all elements into the 2nd dimension
+    m = m.view(dim0, -1)  # reshape into a matrix, interleaving the copy
+    return m
+
+# x: len x bsz x head x head_dim
+def apply_rotary_pos_emb(x, sincos, offset=0):
+    sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
+    # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
+    return (x * cos) + (rotate_every_two(x) * sin)
+
+
+def rotate_every_two(x):
+    x1 = x[:, :, :, ::2]
+    x2 = x[:, :, :, 1::2]
+    x = torch.stack((-x2, x1), dim=-1)
+    return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
+# ======================
 
 def apply_rotary_pos_emb_torch(
     q, k, cos, sin, offset: int = 0

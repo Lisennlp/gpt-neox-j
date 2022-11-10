@@ -21,10 +21,19 @@ torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
 
 
+def gelu_new(x):
+    """ Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT).
+        Also see https://arxiv.org/abs/1606.08415
+    """
+    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+
+
 def get_activation(neox_args):
     """retrieves the activation function specified in neox_args"""
     if neox_args.activation == "geglu":
         activation_func = GEGLU(neox_args=neox_args)
+    if neox_args.activation == "gelu_new":
+        activation_func = gelu_new
     elif neox_args.activation == "gelu":
         if neox_args.onnx_safe and neox_args.bias_gelu_fusion:
             raise ValueError("onnx_safe + bias_gelu_fusion not compatible")

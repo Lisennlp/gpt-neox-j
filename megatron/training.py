@@ -236,7 +236,7 @@ def get_model(neox_args, use_cache=False):
 
     # Build model on cpu.
     model = GPT2ModelPipe(
-        gptj_args=neox_args,    # gxh
+        neox_args=neox_args,    # gxh
         num_tokentypes=0,
         parallel_output=True,
         topology=mpu.get_topology(),
@@ -404,6 +404,7 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     model = get_model(neox_args=neox_args, use_cache=use_cache)
     # @lsp
     for k, v in model.named_parameters():
+        print_rank_0(k, v.shape, rank=0)
         print_rank_0(k, v.shape, rank=7)
     optimizer, param_groups = get_optimizer(model=model, neox_args=neox_args)
     lr_scheduler = get_learning_rate_scheduler(optimizer=optimizer, neox_args=neox_args)
@@ -590,11 +591,11 @@ def train(
             lr_scheduler=lr_scheduler,
         )
        
-        print_rank_0(f'start empty cache!!!!')
-        torch.cuda.empty_cache()
-        print_rank_0(f'empty cache finished!!!!')
+        # print_rank_0(f'start empty cache!!!!')
+        # torch.cuda.empty_cache()
+        # print_rank_0(f'empty cache finished!!!!')
                
-        print_rank_0(f'iteration: {iteration}')
+        # print_rank_0(f'iteration: {iteration}')
         iteration += 1
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable
