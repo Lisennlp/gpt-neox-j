@@ -1,6 +1,8 @@
 # GPT-2 pretraining setup
 {
   ##### gptj_configs, gxh  #####
+  "gradient_accumulation_steps": 16,
+  "gpt_j_residual": true,
   "world_size": 8,
   "global_num_gpus": 8,
   "n_embd": 4096,    
@@ -11,7 +13,7 @@
   "activation_function": 'gelu_new',
   "scaled_upper_triang_masked_softmax_fusion": false,
   "data_path": "./data/enron/enron_text_document",
-  #############################
+  ############################# 
    # parallelism settings ( you will want to change these based on your cluster setup, ideally scheduling pipeline stages
    # across the node boundaries )
    "pipe-parallel-size": 8,    # gxh, 1->8
@@ -92,7 +94,7 @@
    "eval-iters": 10,
 
    # logging
-   "log-interval": 100,
+   "log-interval": 25,
    "steps_per_print": 1,
    "keep-last-n-checkpoints": 4,
    "wall_clock_breakdown": true,
