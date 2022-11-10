@@ -1,5 +1,6 @@
 # GPT-2 pretraining setup
 {
+  "gradient_accumulation_steps": 16,
   ##### gptj_configs, gxh  #####
   "gpt_j_residual": true,
   "world_size": 8,
@@ -55,7 +56,7 @@
   },
 
    # batch / data settings
-   "train_micro_batch_size_per_gpu": 4,
+   "train_micro_batch_size_per_gpu": 1,
    "data-impl": "mmap",
    "split": "949,50,1",
 
@@ -93,7 +94,7 @@
    "eval-iters": 10,
 
    # logging
-   "log-interval": 100,
+   "log-interval": 50,
    "steps_per_print": 1,
    "keep-last-n-checkpoints": 4,
    "wall_clock_breakdown": true,

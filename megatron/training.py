@@ -39,11 +39,10 @@ from megatron.utils import (
 
 from megatron import print_rank_0, mpu
 from megatron.model import (
-    # GPT2ModelPipe,    # gxh
+    GPT2ModelPipe,
     SoftEmbedding,
     get_params_for_weight_decay_optimization,
 )
-from megatron.model.gpt2_model_gptj import GPT2ModelPipe    # gxh
 
 from megatron.checkpointing import load_checkpoint, save_checkpoint
 from megatron.data.data_utils import build_train_valid_test_data_iterators
