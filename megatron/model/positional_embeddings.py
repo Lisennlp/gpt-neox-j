@@ -72,7 +72,6 @@ def rotate_half(x):
 #     return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
 
 # huggingface @lsp ==================
-
 def duplicate_interleave(m):
     """
     A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.

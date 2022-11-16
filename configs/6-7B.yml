@@ -103,6 +103,6 @@
    # @lsp interactive, unconditional, input-file
   # "pipe_partition_method": "type:transformer|mlp",
   "pipe_partition_method": "parameters",
-  # @lsp 140 -> 180
+  # @lsp 140 -> 180 neox和gptj词表大小不同, 50257 -> 50400，为什么是180，是里面有个词表添加数量计算函数
   "make_vocab_size_divisible_by": 180,
 }

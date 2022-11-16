@@ -20,11 +20,9 @@ torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
 
-
+# @lsp
+# @torch.jit.script  # 这个函数不能编译
 def gelu_new(x):
-    """ Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT).
-        Also see https://arxiv.org/abs/1606.08415
-    """
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 

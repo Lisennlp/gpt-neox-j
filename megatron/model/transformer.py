@@ -71,7 +71,7 @@ torch._C._jit_override_can_fuse_on_gpu(True)
 """
 
 
-# @lsp float -> 16
+# @lsp float -> 16 cpu上操作只支持32位，因此计算完转为16
 def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
     dim = x.shape[-1]
     if seq_len is None:
@@ -114,7 +114,7 @@ class ParallelMLP(nn.Module):
             output_size=ff_dim,
             gather_output=False,
             init_method=init_method,
-            skip_bias_add=True,
+            skip_bias_add=True, # @lsp：skip_bias_add为Fasle时，bias直接加在输出上，True时，单独返回bias
         )
         ff_dim_in = ff_dim // 2 if self.activation_type == "geglu" else ff_dim
         # Project back to h.
@@ -130,10 +130,10 @@ class ParallelMLP(nn.Module):
 
     def forward(self, hidden_states):
 
-        # [s, b, 4hp]
+        # [s, b, 4hp] @lsp  skip_bias_add为True，intermediate_parallel和bias是分开返回的
         intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
         if self.activation_type == "gelu_new":
-            intermediate_parallel = self.activation_func(intermediate_parallel)
+            intermediate_parallel = self.activation_func(intermediate_parallel + bias_parallel)
         elif (
             self.activation_type == "gelu" and self.bias_gelu_fusion
         ) or self.activation_type == "geglu":
@@ -168,7 +168,7 @@ class ParallelLinear(nn.Module):
                 neox_args=neox_args,
                 input_size=neox_args.hidden_size,
                 output_size=neox_args.padded_vocab_size,
-                bias=True, # @lsp
+                bias=True, # @lsp gptj有bias
                 init_method=init_method,
                 gather_output=not parallel_output,
                 skip_bias_add=False,
@@ -178,7 +178,7 @@ class ParallelLinear(nn.Module):
                 neox_args=neox_args,
                 input_size=neox_args.hidden_size,
                 output_size=neox_args.padded_vocab_size,
-                bias=True, # @lsp
+                bias=False,
                 input_is_parallel=False,
                 init_method=init_method,
                 parallel_output=parallel_output,
@@ -235,7 +235,7 @@ class ParallelSelfAttention(nn.Module):
             neox_args=neox_args,
             input_size=neox_args.hidden_size,
             output_size=3 * neox_args.hidden_size,
-            bias=False, # @lsp
+            bias=False, # @lsp gptj的qkv转换无bias
             gather_output=False,
             init_method=init_method,
         )
@@ -308,7 +308,7 @@ class ParallelSelfAttention(nn.Module):
             neox_args=neox_args,
             input_size=neox_args.hidden_size,
             output_size=neox_args.hidden_size,
-            bias=False, # @lsp
+            bias=False, # @lsp gptj的value转换无bias
             input_is_parallel=True,
             init_method=output_layer_init_method,
             skip_bias_add=True,
@@ -435,13 +435,13 @@ class ParallelSelfAttention(nn.Module):
         return self.sparse_attn(
             query_layer, key_layer, value_layer, attn_mask=attn_mask, rpe=rpe
         )
-
+    # @lsp
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
             """
             Splits hidden dim into attn_head_size and num_attention_heads
             """
             new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
-            tensor = tensor.view(new_shape).contiguous() # @lsp
+            tensor = tensor.view(new_shape).contiguous() # @lsp，需要连续的内存，不然进行permute报错
             if rotary:
                 return tensor
             if len(tensor.shape) == 5:
@@ -461,7 +461,6 @@ class ParallelSelfAttention(nn.Module):
 
         # Attention heads [sq, b, h] --> [sq, b, (np * 3 * hn)]  3 x 1 x 16388
         mixed_x_layer, _ = self.query_key_value(hidden_states)
-        # print_rank_0(f'mixed_x_layer: {mixed_x_layer[:3, 0]} shape: {mixed_x_layer[:3, 0].shape} sum: {mixed_x_layer[:3, 0].sum()}')
         # [sq, b, (np * 3 * hn)] --> [sq, b, np, 3 * hn]
         # new_tensor_shape = mixed_x_layer.size()[:-1] + (
         #     self.num_attention_heads_per_partition,
@@ -469,7 +468,7 @@ class ParallelSelfAttention(nn.Module):
         # )
         # mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
 
-        # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]
+        # [sq, b, np, 3 * hn] --> 3 [sq, b, np, hn]  
         (query_layer, key_layer, value_layer) = mpu.split_tensor_along_last_dim(
             mixed_x_layer, 3
         )
@@ -508,11 +507,11 @@ class ParallelSelfAttention(nn.Module):
             # query_layer, key_layer = apply_rotary_fn(
             #     query_rot, key_rot, cos, sin, offset=offset
             # )
-            # huggingface  start------ @lsp
+            # huggingface  start------ @lsp 绝对位置向量
             sincos = fixed_pos_embedding(key_rot, 1, seq_len=seq_len)
+            # @lsp 加入rotary位置向量
             key_layer = apply_rotary_pos_emb(key_rot.permute(1, 0, 2, 3), sincos, offset=offset).permute(1, 0, 2, 3)
             query_layer = apply_rotary_pos_emb(query_rot.permute(1, 0, 2, 3), sincos, offset=offset).permute(1, 0, 2, 3)
-
             # ------------end /
             if exists(self.rotary_ndims):
                 query_layer = torch.cat((query_layer, query_pass), dim=-1)
