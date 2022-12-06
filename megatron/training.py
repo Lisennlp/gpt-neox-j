@@ -101,11 +101,13 @@ def pretrain(neox_args):
         ) = metaicl_dataloader(neox_args=neox_args)
         #@lsp-data====================
     else:
-        # 单train，valid，test文件时
-        neox_args.data_path = neox_args.train_data_path
-        (train_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
-        neox_args.data_path = neox_args.valid_data_path
-        (valid_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        (train_data_iterator, valid_data_iterator, test_data_iterator,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+
+        # # 单train，valid，test文件时
+        # neox_args.data_path = neox_args.train_data_path
+        # (train_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # neox_args.data_path = neox_args.valid_data_path
+        # (valid_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
         # neox_args.data_path = neox_args.test_data_path
         # (test_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
 
@@ -263,6 +265,7 @@ def forward_step(data_iterator, model, neox_args, timers, return_logits=False):
     if neox_args.is_pipe_parallel:
         # return_logits = True
         loss = model.eval_batch(data_iterator, return_logits=return_logits)
+        print(f'loss: {loss}')
         #     print(f'loss: {loss.item()} logits: {logits.shape}')
         #     file_path = f'/nas/lishengping/caiyun_projects/gpt_neox/neo_dev/logits_{count}.pkl'
         #     # x = {'loss': {loss.cpu().item()}, 'logits': logits.cpu()}
@@ -462,8 +465,8 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     model = get_model(neox_args=neox_args, use_cache=use_cache)
     # @lsp
     for k, v in model.named_parameters():
-        print_rank_0(k, v.shape, rank=0)
-        print_rank_0(k, v.shape, rank=7)
+        print_rank_0(k, v.shape, v.sum().item(),rank=0)
+        print_rank_0(k, v.shape, v.sum().item(), rank=7)
     optimizer, param_groups = get_optimizer(model=model, neox_args=neox_args)
     lr_scheduler = get_learning_rate_scheduler(optimizer=optimizer, neox_args=neox_args)
 

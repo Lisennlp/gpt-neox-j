@@ -71,11 +71,10 @@ class NeoXArgsParallelism(NeoXArgsTemplate):
 @dataclass
 class NeoXArgsModel(NeoXArgsTemplate):
     ##### gptj_args, gxh #####
-    n_inner: int = None    
+    n_inner: int = None 
     """
     MLP hidden size, default = 4 * hidden_size
     """
-
     n_embd: int = None    
     """
     hidden size
@@ -86,6 +85,13 @@ class NeoXArgsModel(NeoXArgsTemplate):
     rotary_dim: int = None
     activation_function: str=None
     scaled_upper_triang_masked_softmax_fusion: bool=None
+    # gpt2 @lsp
+    n_ctx: int = None    
+    scale_attn_weights: float = None
+    is_cross_attention: bool = False
+    scale_attn_by_inverse_layer_idx: bool = False
+    reorder_and_upcast_attn: bool = False
+    add_cross_attention: bool = False
     #############################
 
 

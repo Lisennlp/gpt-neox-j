@@ -29,9 +29,9 @@ from megatron.model.init_functions import get_init_methods
 
 from megatron import mpu
 from megatron.mpu import ParallelRelativePositionBias
-from megatron.model.transformer import (
-    # NormPipe, # @lsp
-    parallel_lm_logits,
+from megatron.model.transformer_gptj import (
+    NormPipe, # @lsp
+    # parallel_lm_logits,
 )
 from megatron.model.gmlp import GMLPBlock
 # from megatron.model.word_embeddings import Embedding, EmbeddingPipe, SoftEmbedding
@@ -103,13 +103,13 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
 
     def __init__(
         self,
-        gptj_args,
+        neox_args,
         num_tokentypes=0,
         parallel_output=True,
         topology=None,
         use_cache=False,
     ):
-        self.gptj_args = gptj_args
+        self.gptj_args = neox_args
 
         self.use_cache = use_cache
         self.parallel_output = parallel_output
@@ -130,7 +130,7 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
             activation_checkpoint_interval=self.gptj_args.checkpoint_num_layers
             if self.gptj_args.checkpoint_activations
             else 0,
-            partition_method=gptj_args.pipe_partition_method,  # 有效参数切分方法
+            partition_method=neox_args.pipe_partition_method,  # 有效参数切分方法
             # num_stages = gptj_args.num_stages,    # gxh
             checkpointable_layers=["GMLPBlock", "TransformerLayerPipe"],
         )
@@ -168,7 +168,7 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
         )
 
     def init_specs(self):
-
+        # 是否共享词向量参数，no_weight_tying=False共享
         weight_tying = not self.gptj_args.no_weight_tying
         self.specs = []
 

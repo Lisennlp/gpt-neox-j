@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# from .gpt2_model_gptj import GPT2ModelPipe
 from .gpt2_model import GPT2ModelPipe
+
 from .utils import get_params_for_weight_decay_optimization
 from .word_embeddings import SoftEmbedding

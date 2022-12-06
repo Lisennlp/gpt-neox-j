@@ -30,7 +30,7 @@ torch._C._jit_override_can_fuse_on_gpu(True)
 
 from megatron.model.positional_embeddings import SinusoidalPositionalEmbedding
 
-from transformers.models.gptj.modeling_gptj import GPTJBlock 
+from transformers.models.gpt2.modeling_gpt2 import GPT2Block 
 
 
 class NormPipe(nn.Module):
@@ -66,6 +66,7 @@ class Linear(nn.Module):
             bias=True, # @lsp True   
         )
     def forward(self, hidden_states):
+        print(f'hidden_states: {hidden_states} shape: {hidden_states.shape}')
         return self.lm_head(hidden_states) # final_linear -> lm_head
 
 class LinearPipe(Linear):
@@ -239,7 +240,7 @@ class EmbeddingPipe(Embedding):
         embeddings = super().forward(input_ids, position_ids)
         return embeddings, attention_mask
 
-class TransformerLayerPipe(GPTJBlock):
+class TransformerLayerPipe(GPT2Block):
     """Extends ParallelTransformerLayer to forward attention_mask through the pipeline."""
 
     def forward(self, args):
