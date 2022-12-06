@@ -24,7 +24,7 @@ import socket
 from typing import Dict, List
 
 import requests
-import wandb 
+import wandb
 from wandb import UsageError
 
 import torch

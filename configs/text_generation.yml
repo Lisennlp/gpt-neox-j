@@ -6,15 +6,15 @@
 
   # Params for all
   "maximum_tokens": 102,
-  "temperature": 0,
-  "top_p": 0,
+  "temperature": 1.0,
+  "top_p": 0.0,
   "top_k": 0,
-  "recompute": True,
+  "recompute": true,
 
   # `unconditional`: samples
-  "num-samples": 3,
+  "num-samples": 10,
 
   # input/output file
-  "sample-input-file": "input_file2.txt",
-  "sample-output-file": "sample_output2.txt",
+  "sample-input-file": "sample_input.txt",
+  "sample-output-file": "sample_output.txt",
 }

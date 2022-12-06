@@ -18,13 +18,16 @@
   "vocab-file": "data/gpt2-vocab.json",
   "merge-file": "data/gpt2-merges.txt",
 
-  "save": "checkpoints",
-  "load": "checkpoints",
   "checkpoint_validation_with_forward_pass": False,
 
   "tensorboard-dir": "tensorboard",
   "log-dir": "logs",
-  "use_wandb": True,
+  "use_wandb": False,
   "wandb_host": "https://api.wandb.ai",
-  "wandb_project": "neox"
+  "wandb_project": "neox",
+
+  "load": "./6B-tensor-para-exp_checkpoints-mp8-pp1",
+  "save": "./6B-tensor-para-exp_checkpoints-mp8-pp1",
+  # "train_micro_batch_size_per_gpu": 1,
+
 }

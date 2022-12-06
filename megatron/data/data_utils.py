@@ -81,8 +81,8 @@ def build_train_valid_test_datasets(
     """Build train, valid, and test datasets."""
 
     # Indexed dataset.
-    print(f'data_prefix{data_prefix}, data_impl:{data_impl}, skip_warmup:{skip_warmup}')
     indexed_dataset = make_indexed_dataset(data_prefix, data_impl, skip_warmup)
+
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
 
@@ -378,7 +378,6 @@ def build_train_valid_test_data_iterators(neox_args):
         else:
             # when just data_path is provided
             # split dataset into train, valid and test from data_path
-            print(f'neox_args.data_path: {neox_args.data_path}')
             train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
                 data_prefix=neox_args.data_path,
                 data_impl=neox_args.data_impl,

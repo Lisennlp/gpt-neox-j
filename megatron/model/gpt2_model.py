@@ -240,14 +240,14 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
                 self.specs.append(
                     LayerSpec(
                         ParallelTransformerLayerPipe,
-                        neox_args=self.neox_args,
-                        attention_mask_func=gpt2_attention_mask_func,
-                        init_method=self.init_method,
-                        output_layer_init_method=self.output_layer_init_method,
-                        layer_number=i,
-                        rpe=rpe_emb if self.neox_args.pos_emb == "rpe" else None,
-                        rotary=self.neox_args.pos_emb == "rotary",
-                        use_cache=self.use_cache,
+                        config=self.neox_args,
+                        # attention_mask_func=gpt2_attention_mask_func,
+                        # init_method=self.init_method,
+                        # output_layer_init_method=self.output_layer_init_method,
+                        # layer_number=i,
+                        # rpe=rpe_emb if self.neox_args.pos_emb == "rpe" else None,
+                        # rotary=self.neox_args.pos_emb == "rotary",
+                        # use_cache=self.use_cache,
                     )
                 )
 

@@ -232,6 +232,7 @@ def stream_tokens(
         pad_id=neox_args.tokenizer.eod,
         pad_len=neox_args.seq_length,
     )
+
     # convert to tensor and broadcast
     context_tokens = torch.cuda.LongTensor(context_tokens)
     if stop_tokens:
@@ -258,7 +259,6 @@ def stream_tokens(
 
     # set variables
     eos_token_id = eos_token_id or neox_args.tokenizer.eod
-    # 取最小值
     maximum_tokens = maximum_tokens or (
         neox_args.seq_length - token_generation_start_index.max().item() - 1
     )
@@ -310,7 +310,6 @@ def stream_tokens(
                 )
 
                 logits = forward_model(model, model_inputs, neox_args.is_pipe_parallel)
-                # 不是返回logits的返回None
                 if logits is not None:  # if pipe parallel, not all ranks return logits
                     generated_token_logits = (
                         logits[:, -1].view(batch_size, -1).contiguous()
@@ -434,8 +433,6 @@ def generate_samples_from_prompt(
     input_count = len(text)
     input_pos = 0
 
-    for k, v in model.named_parameters():
-        print_rank_0(k, v.sum(), rank=0)
     # generate completions
     generated_texts = []
     while True:
@@ -510,7 +507,6 @@ def generate_samples_from_prompt(
             if end_index >= start_index:
                 generated_tokens = tokens[start_index : end_index + 1]
                 try:
-                    # print(f'generated_tokens: {generated_tokens}')
                     generated_text = neox_args.tokenizer.detokenize(generated_tokens)
                     message = None
                 except KeyError:
@@ -684,7 +680,7 @@ def generate_samples_unconditional(
     print_rank_0("generate_samples_unconditional() done")
     return generated_texts
 
-# 终端交互输入
+
 def generate_samples_interactive(
     neox_args,
     model,

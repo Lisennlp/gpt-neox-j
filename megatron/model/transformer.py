@@ -22,7 +22,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
-from megatron.model.norms import get_norm
+from .norms import get_norm
 from megatron import mpu
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.activations import get_activation
@@ -468,7 +468,6 @@ class ParallelSelfAttention(nn.Module):
             if exists(self.rotary_ndims):
                 query_layer = torch.cat((query_layer, query_pass), dim=-1)
                 key_layer = torch.cat((key_layer, key_pass), dim=-1)
-
         # ==================================
         # Cache key and value for inference
         # ==================================
@@ -661,16 +660,28 @@ class ParallelTransformerLayer(nn.Module):
         return output
 
 
-class ParallelTransformerLayerPipe(ParallelTransformerLayer):
-    """Extends ParallelTransformerLayer to forward attention_mask through the pipeline."""
+# class ParallelTransformerLayerPipe(ParallelTransformerLayer):
+#     """Extends ParallelTransformerLayer to forward attention_mask through the pipeline."""
 
+#     def forward(self, args):
+#         assert (
+#             len(args) == 2
+#         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
+#         hidden_states, attention_mask = args
+#         # we are returning just [hidden_states, mask]
+#         return super().forward(hidden_states, attention_mask), attention_mask
+
+# from transformers.models.gpt2_model import GPT2Block
+from transformers.models.gpt2.modeling_gpt2 import GPT2Block 
+
+
+class ParallelTransformerLayerPipe(GPT2Block):
     def forward(self, args):
         assert (
             len(args) == 2
         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
         hidden_states, attention_mask = args
-        # we are returning just [hidden_states, mask]
-        return super().forward(hidden_states, attention_mask), attention_mask
+        return super().forward(hidden_states, attention_mask=None)[0], attention_mask # lsp
 
 
 class ParallelLinearPipe(ParallelLinear):

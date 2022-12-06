@@ -100,7 +100,7 @@ class SequentialWrapper(torch.nn.Module):
     def _is_checkpointable(self, funcs):
         if self.parent_class_name == "GPT2ModelPipe":
             return all(
-                "TransformerLayerPipe" in f.__class__.__name__ for f in funcs    # gxh, ParallelTransformerLayerPipe -> TransformerLayerPipe 
+                "ParallelTransformerLayerPipe" in f.__class__.__name__ for f in funcs
             )
         params = [f.parameters() for f in funcs if isinstance(f, torch.nn.Module)]
         return any(len(list(p)) > 0 for p in params)

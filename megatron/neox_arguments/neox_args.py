@@ -1,3 +1,4 @@
+
 import subprocess
 from dataclasses import dataclass
 
@@ -71,11 +72,10 @@ class NeoXArgsParallelism(NeoXArgsTemplate):
 @dataclass
 class NeoXArgsModel(NeoXArgsTemplate):
     ##### gptj_args, gxh #####
-    n_inner: int = None    
+    n_inner: int = None 
     """
     MLP hidden size, default = 4 * hidden_size
     """
-
     n_embd: int = None    
     """
     hidden size
@@ -86,6 +86,13 @@ class NeoXArgsModel(NeoXArgsTemplate):
     rotary_dim: int = None
     activation_function: str=None
     scaled_upper_triang_masked_softmax_fusion: bool=None
+    # gpt2 @lsp
+    n_ctx: int = None    
+    scale_attn_weights: float = None
+    is_cross_attention: bool = False
+    scale_attn_by_inverse_layer_idx: bool = False
+    reorder_and_upcast_attn: bool = False
+    add_cross_attention: bool = False
     #############################
 
 
@@ -174,18 +181,13 @@ class NeoXArgsModel(NeoXArgsTemplate):
 
     """
     Attention configuration for gpt-neox
-
     The first item in the list specifies the attention type(s), and should be a list of strings. The second item
     specifies the number of times to repeat those attention types in the full list.
-
     attention type choices:  [global, local, sparse_fixed, sparse_variable, bslongformer, bigbird]
-
     So a 12 layer network with only global attention could be specified like:
         [[[`global`], 12]]
-
     or a 12 layer network with alternating global / local like:
         [[[`global`, `local`], 6]]
-
     If none is specified, this defaults to
         [[[`global`], n_layers]]
     """
@@ -194,13 +196,10 @@ class NeoXArgsModel(NeoXArgsTemplate):
 
     """
     Sparsity configuration dict as defined in https://www.deepspeed.ai/docs/config-json/#sparse-attention
-
     Note that since neox is autoregressive, attention is always "unidirectional" and `horizontal_global_attention` is
     always false.
-
     The main difference between our sparsity config and deepspeed's is that `mode` is ignored - since it is instead
     specified in attention_config defining each layer.
-
     An example config is given below:
           "sparse_attention": {
             "block": 16,
@@ -531,6 +530,7 @@ class NeoXArgsOther(NeoXArgsTemplate):
     """
     Misc. Arguments
     """
+    icl_or_neo: str = "icl"
 
     distributed_backend: str = "nccl"
     """
@@ -667,6 +667,9 @@ class NeoXArgsTraining(NeoXArgsTemplate):
     """
 
     data_path: str = None
+    train_data_path: str = None
+    valid_data_path: str = None
+    test_data_path: str = None
     """
     Path to combined dataset to split.
     """
@@ -708,23 +711,18 @@ class NeoXArgsTraining(NeoXArgsTemplate):
     """
     If True, Builds dataset weights from a multinomial distribution over groups of data according to the number of
     documents in each group.
-
     WARNING: setting this to True will override any user provided weights
-
     We sample from a group according to the probability p(L) ∝ |L| ** α,
     where p(L) is the probability of sampling from a given group,
           |L| is the number of examples in that datapoint,
           and α is a coefficient that acts to upsample data from underrepresented groups
-
     Hence α (`alpha`) allows us to control how much to 'boost' the probability of training on low-resource groups.
-
     See https://arxiv.org/abs/1911.02116 for more details
     """
 
     weighted_sampler_alpha: float = 0.3
     """
     Alpha value for `weight_by_num_documents`. Only has an effect if `weight_by_num_documents` = True.
-
     when alpha = 1, the probability of sampling from a given group = n_samples / total_samples
     as alpha -> 0, the probability of sampling from all groups becomes equal, and number of documents has no effect
     as alpha -> inf, the probability of sampling from the groups with *the most samples* -> 1

@@ -106,7 +106,6 @@ def wang_init_method(n_layers, dim):
 
 def get_init_methods(args):
     def _get(name):
-        print("name", name)
         if name == "normal":
             return init_method_normal(args.init_method_std)
         elif name == "scaled_normal":
@@ -124,7 +123,6 @@ def get_init_methods(args):
         elif name == "small_init":
             return small_init_init_method(args.hidden_size)
         else:
-            print("name", name)
             raise NotImplementedError(f"Unknown init method {name}")
 
     return _get(args.init_method), _get(args.output_layer_init_method)

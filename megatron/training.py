@@ -39,12 +39,10 @@ from megatron.utils import (
 
 from megatron import print_rank_0, mpu
 from megatron.model import (
-    # GPT2ModelPipe,    # gxh
+    GPT2ModelPipe,
     SoftEmbedding,
     get_params_for_weight_decay_optimization,
 )
-from megatron.model.gpt2_model_gptj import GPT2ModelPipe    # gxh
-
 from megatron.checkpointing import load_checkpoint, save_checkpoint
 from megatron.data.data_utils import build_train_valid_test_data_iterators
 from megatron.initialize import initialize_megatron
@@ -81,6 +79,7 @@ def pretrain(neox_args):
 
     # Initialize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(neox_args=neox_args)
+    print_rank_0(f'iters nums: {neox_args.train_iters}')
 
     # Model, optimizer, and learning rate.
     timers("model and optimizer").start()
@@ -101,9 +100,21 @@ def pretrain(neox_args):
     # Print setup timing.
     print_rank_0("done with setups ...")
     timers.log(["model and optimizer", "train/valid/test data iterators"])
-    print_rank_0("training ...")
 
     iteration = 0
+
+    prefix = "the start of training for val data"
+    evaluate_and_print_results(
+            neox_args=neox_args,
+            prefix=prefix,
+            forward_step_func=forward_step,
+            data_iterator=valid_data_iterator,
+            model=model,
+            iteration=iteration,
+            verbose=False,
+            timers=timers,
+        )
+    print_rank_0("training ...")
     if neox_args.do_train and neox_args.train_iters > 0:
         iteration = train(
             neox_args=neox_args,
@@ -236,7 +247,7 @@ def get_model(neox_args, use_cache=False):
 
     # Build model on cpu.
     model = GPT2ModelPipe(
-        gptj_args=neox_args,    # gxh
+        neox_args=neox_args,
         num_tokentypes=0,
         parallel_output=True,
         topology=mpu.get_topology(),
@@ -402,9 +413,9 @@ def get_learning_rate_scheduler(optimizer, neox_args):
 def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     """Setup model and optimizer."""
     model = get_model(neox_args=neox_args, use_cache=use_cache)
-    # @lsp
     for k, v in model.named_parameters():
-        print_rank_0(k, v.shape, rank=7)
+        # print_rank_0(k, v.shape, v.sum().item(), rank=0)
+        print_rank_0(k, v.shape, v.sum().item(), rank=7)
     optimizer, param_groups = get_optimizer(model=model, neox_args=neox_args)
     lr_scheduler = get_learning_rate_scheduler(optimizer=optimizer, neox_args=neox_args)
 
@@ -437,30 +448,20 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     else:
         raise ValueError("Must be using deepspeed to run neox")
 
-    # if torch.distributed.get_rank() == 0:
-    #     print_rank_0('-----------@@@@@')
-    #     model.save_checkpoint('checkpoints', tag='global_step0', client_state={})
-       
-    #     print(f'save model finished=========')
-
-
     if neox_args.load is not None:
-  
         neox_args.iteration = load_checkpoint(
-                neox_args=neox_args,
-                model=model,
-                optimizer=optimizer,
-                lr_scheduler=lr_scheduler,
-                iteration=iteration,
-            )
+            neox_args=neox_args,
+            model=model,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+            iteration=iteration,
+        )
         print_rank_0(
             f"Loading checkpoint and starting from iteration {neox_args.iteration}"
         )
     else:
         neox_args.iteration = 0
-    print(f'mode init finished')
-    
-    
+
     return model, optimizer, lr_scheduler
 
 
@@ -580,17 +581,6 @@ def train(
 
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
-    prefix = "iteration {}".format(iteration)
-    evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=valid_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -600,13 +590,8 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-       
-        print_rank_0(f'start empty cache!!!!')
-        torch.cuda.empty_cache()
-        print_rank_0(f'empty cache finished!!!!')
-               
-        print_rank_0(f'iteration: {iteration}')
         iteration += 1
+
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable
             noise_scale_logger.update()
