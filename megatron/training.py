@@ -33,6 +33,7 @@ from megatron.utils import (
     Timers,
     init_wandb,
     get_ltor_masks_and_position_ids,
+    get_ltor_masks_and_position_ids_,
     reduce_losses,
 )
 
@@ -45,7 +46,7 @@ from megatron.model import (
 )
 
 from megatron.checkpointing import load_checkpoint, save_checkpoint
-from megatron.data.data_utils import build_train_valid_test_data_iterators
+from megatron.data.data_utils import build_train_valid_test_data_iterators, metaicl_dataloader
 from megatron.initialize import initialize_megatron
 from megatron.learning_rates import AnnealingLR
 from megatron.logging import tb_wandb_log, training_log
@@ -90,17 +91,33 @@ def pretrain(neox_args):
 
     # Data stuff.
     timers("train/valid/test data iterators").start()
-    (
-        train_data_iterator,
-        valid_data_iterator,
-        test_data_iterator,
-    ) = build_train_valid_test_data_iterators(neox_args=neox_args)
-    timers("train/valid/test data iterators").stop()
 
+    if neox_args.icl_or_neo == 'icl':
+        # @lsp-data====================
+        (
+            train_data_iterator,
+            valid_data_iterator,
+            test_data_iterator,
+        ) = metaicl_dataloader(neox_args=neox_args)
+        #@lsp-data====================
+    else:
+        # 单train，valid，test文件时
+        neox_args.data_path = neox_args.train_data_path
+        (train_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        neox_args.data_path = neox_args.valid_data_path
+        (valid_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # neox_args.data_path = neox_args.test_data_path
+        # (test_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+
+    timers("train/valid/test data iterators").stop()
     # Print setup timing.
     print_rank_0("done with setups ...")
     timers.log(["model and optimizer", "train/valid/test data iterators"])
     print_rank_0("training ...")
+
+    print_rank_0(f'neox_args.do_train: {neox_args.do_train}')
+    print_rank_0(f'neox_args.train_iters: {neox_args.train_iters}')
+
 
     iteration = 0
     if neox_args.do_train and neox_args.train_iters > 0:
@@ -166,7 +183,26 @@ def _get_batch(neox_args, tokenizer, keys, data, datatype):
         eod_token=neox_args.tokenizer.eod,
         eod_mask_loss=neox_args.eod_mask_loss,
     )
+    return tokens, labels, loss_mask, attention_mask, position_ids
 
+
+def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
+    """Support function for get_batch / get_batch pipe (to avoid code repetition)"""
+    data_b = mpu.broadcast_data(keys, data, datatype)
+    # Unpack.
+    tokens_ = data_b["input_ids"].long()
+    labels = tokens_[:, 1:].contiguous()
+    tokens = tokens_[:, :-1].contiguous()
+
+    loss_mask = data_b["token_type_ids"][:, 1:].bool()
+    attention_mask = data_b["attention_mask"][:, :-1].bool()
+
+    # Get the masks and position ids.
+    position_ids = get_ltor_masks_and_position_ids_(
+        data=tokens,
+        eod_token=0,
+        eod_mask_loss=neox_args.eod_mask_loss,
+    )
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 
@@ -191,24 +227,47 @@ def get_batch(neox_args, data_iterator):
     )
 
 
+import pickle
+# count = 0
 def get_batch_pipe(data, neox_args):
     """A modification of get_batch() to work with the latest batch instead of an iterator."""
     # Items and their type.
-    keys = ["text"]
+    global count
     datatype = torch.int64
-
-    tokens, labels, loss_mask, attention_mask, position_ids = _get_batch(
+    # @lsp
+    if neox_args.icl_or_neo == 'icl':
+        keys = ["input_ids", 'attention_mask', 'token_type_ids']
+         # @lsp
+        tokens, labels, loss_mask, attention_mask, position_ids = _get_batch_icl(
         neox_args, neox_args.tokenizer, keys, data, datatype
-    )
-
+        )
+        # loss_mask[:, :attention_mask.sum()] = 1
+        attention_mask = torch.triu(attention_mask.new_ones(attention_mask.shape[1], attention_mask.shape[1]),
+                                       diagonal=1).bool()[None,None,:, :]
+    else:
+        keys = ['text']
+        tokens, labels, loss_mask, attention_mask, position_ids = _get_batch(
+            neox_args, neox_args.tokenizer, keys, data, datatype
+        )
     # unpack data
+    # count += 1
+    # x = {'tokens': tokens, 'position_ids': position_ids,'attention_mask': attention_mask, 'labels': labels, 'loss_mask': loss_mask}
+    # x = {k: v.cpu() for k, v in x.items()}
+    # file_path = f'/nas/lishengping/caiyun_projects/gpt_neox/neo_dev/input_{count}.pkl'
+    # pickle.dump(x, open(file_path, 'wb'))
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
 def forward_step(data_iterator, model, neox_args, timers, return_logits=False):
     """Forward step."""
     if neox_args.is_pipe_parallel:
-        return model.eval_batch(data_iterator, return_logits=return_logits)
+        # return_logits = True
+        loss = model.eval_batch(data_iterator, return_logits=return_logits)
+        #     print(f'loss: {loss.item()} logits: {logits.shape}')
+        #     file_path = f'/nas/lishengping/caiyun_projects/gpt_neox/neo_dev/logits_{count}.pkl'
+        #     # x = {'loss': {loss.cpu().item()}, 'logits': logits.cpu()}
+        #     pickle.dump(x, open(file_path, 'wb'))
+        return loss
 
     # Get the batch.
     if timers is not None:
@@ -581,6 +640,8 @@ def train(
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
     prefix = "iteration {}".format(iteration)
+    # 起始评测
+    neox_args.eval_iters = 100
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -591,6 +652,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
+    neox_args.eval_iters = 500
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -601,11 +663,6 @@ def train(
             lr_scheduler=lr_scheduler,
         )
        
-        # print_rank_0(f'start empty cache!!!!')
-        # torch.cuda.empty_cache()
-        # print_rank_0(f'empty cache finished!!!!')
-               
-        # print_rank_0(f'iteration: {iteration}')
         iteration += 1
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable

@@ -82,14 +82,14 @@ def get_ltor_masks_and_position_ids(
 
     # Extract batch size and sequence length.
     batch_size, seq_length = data.size()
-
+    # @lsp
     # Attention mask (lower triangular).
     attention_mask = get_attn_mask(
         seq_length=seq_length,
         device=data.device,
     )
 
-    # Loss mask.
+    # Loss mask. @lsp
     loss_mask = torch.ones(data.size(), dtype=torch.float, device=data.device)
     if eod_mask_loss:
         loss_mask[data == eod_token] = 0.0
@@ -97,9 +97,22 @@ def get_ltor_masks_and_position_ids(
     # Position ids.
     position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
     position_ids = position_ids.unsqueeze(0).expand_as(data)
-
+    # @lsp
     return attention_mask, loss_mask, position_ids
 
+# @lsp
+def get_ltor_masks_and_position_ids_(
+    data,
+    eod_token,
+    eod_mask_loss=False,
+):
+    """Build masks and position id for left to right model."""
+    # Extract batch size and sequence length.
+    batch_size, seq_length = data.size()
+    position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
+    position_ids = position_ids.unsqueeze(0).expand_as(data)
+    # @lsp
+    return position_ids
 
 def local_rank():
     """Local rank of process"""

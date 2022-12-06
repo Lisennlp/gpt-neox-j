@@ -531,6 +531,7 @@ class NeoXArgsOther(NeoXArgsTemplate):
     """
     Misc. Arguments
     """
+    icl_or_neo: str = "icl"
 
     distributed_backend: str = "nccl"
     """
@@ -667,6 +668,9 @@ class NeoXArgsTraining(NeoXArgsTemplate):
     """
 
     data_path: str = None
+    train_data_path: str = None
+    valid_data_path: str = None
+    test_data_path: str = None
     """
     Path to combined dataset to split.
     """

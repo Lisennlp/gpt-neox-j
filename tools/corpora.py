@@ -147,6 +147,7 @@ class DataDownloader(ABC):
 
         if self.ftfy:
             cmd += f"--ftfy "
+        print(f'data cmd: {cmd} ===========')
 
         os.system(cmd)
 

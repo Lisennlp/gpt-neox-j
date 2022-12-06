@@ -1,15 +1,22 @@
 import math
-import torch
+import os
+from collections import defaultdict
+import pickle
+
 import numpy as np
 from typing import List, Tuple
 from itertools import zip_longest
 from functools import partial
+
+import torch
+from torch.utils.data import DataLoader
 
 from megatron import mpu, print_rank_0
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.gpt2_dataset import GPT2Dataset
 from megatron.data.samplers import DistributedBatchSampler
+
 
 
 def make_data_loader(dataset, neox_args):
@@ -82,6 +89,7 @@ def build_train_valid_test_datasets(
 
     # Indexed dataset.
     print(f'data_prefix{data_prefix}, data_impl:{data_impl}, skip_warmup:{skip_warmup}')
+    # MMapIndexedDataset对象
     indexed_dataset = make_indexed_dataset(data_prefix, data_impl, skip_warmup)
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
@@ -123,7 +131,7 @@ def build_train_valid_test_datasets(
     train_dataset = build_dataset(0, "train")
     valid_dataset = build_dataset(1, "valid")
     test_dataset = build_dataset(2, "test")
-
+    # GPT2Dataset对象
     return train_dataset, valid_dataset, test_dataset
 
 
@@ -474,3 +482,80 @@ def compile_helper():
         import sys
 
         sys.exit(1)
+
+
+def get_batch_data(data_dir, f, batch_size):
+    abs_path = os.path.join(data_dir, f)
+    data = pickle.load(open(abs_path, 'rb'))
+    batch_data = defaultdict(list)
+    for k, v in data.items():
+        for i in range(0, len(v), batch_size):
+            batch_data = {}
+            for key in data:
+                t = np.array(data[key][i: (i + 1) * batch_size])
+                batch_data[key] = torch.from_numpy(t)
+            yield batch_data
+
+
+def metaicl_dataloader(neox_args):
+    (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
+    print_rank_0("> building train, validation, and test datasets ...")
+    if neox_args.is_pipe_parallel:
+        is_first_stage = mpu.get_pipe_parallel_rank() == 0
+        is_last_stage = (
+            mpu.get_pipe_parallel_rank() == mpu.get_pipe_parallel_world_size() - 1
+        )
+        pipe_load = is_first_stage or is_last_stage
+    else:
+        pipe_load = True
+
+    if mpu.get_model_parallel_rank() == 0 and pipe_load:
+        batch_size = neox_args.batch_size
+        files = os.listdir(neox_args.data_path)
+        train_file_path = [f for f in files if 'train' in f]
+        dev_file_path = [f for f in files if 'dev' in f]
+        test_file_path = [f for f in files if 'test' in f]
+        train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+        valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+        test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+    else:
+        pass
+    
+    if mpu.get_model_parallel_rank() == 0 and pipe_load:
+        do_train = train_dataloader is not None and neox_args.train_iters > 0
+        do_valid = valid_dataloader is not None and neox_args.eval_iters > 0
+        do_test = test_dataloader is not None and neox_args.eval_iters > 0
+        # Need to broadcast num_tokens and num_type_tokens.
+        flags = torch.cuda.LongTensor([int(do_train), int(do_valid), int(do_test)])
+    else:
+        flags = torch.cuda.LongTensor([0, 0, 0])
+
+    if neox_args.is_pipe_parallel:
+        torch.distributed.broadcast(flags, src=0)
+    else:
+        torch.distributed.broadcast(
+            flags,
+            mpu.get_model_parallel_src_rank(),
+            group=mpu.get_model_parallel_group(),
+        )
+    neox_args.do_train = flags[0].item()
+    neox_args.do_valid = flags[1].item()
+    neox_args.do_test = flags[2].item()
+
+    # Build iterators.
+    if train_dataloader is not None:
+        train_data_iterator = iter(train_dataloader)
+    else:
+        train_data_iterator = None
+
+    if valid_dataloader is not None:
+        valid_data_iterator = iter(valid_dataloader)
+    else:
+        valid_data_iterator = None
+
+    if test_dataloader is not None:
+        test_data_iterator = iter(test_dataloader)
+    else:
+        test_data_iterator = None
+
+    return train_data_iterator, valid_data_iterator, test_data_iterator

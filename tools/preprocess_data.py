@@ -162,6 +162,26 @@ def yield_from_files(fnames: list, semaphore):
         yield from yielder(fname, semaphore)
 
 
+def yield_from_files_icl(fnames: list, semaphore):
+    """
+    Iterator over input documents using lm_dataformat. Should be able to handle jsons / texts /
+    other compressed formats. Also filters out empty documents.
+
+    :param fnames: list of filenames
+    """
+
+    def yielder(fname, semaphore):
+        with open(fname):
+            for f in filter(lambda x: x, lmd.Reader(fname).stream_data()):
+                semaphore.acquire()
+                yield f
+
+    for fname in fnames:
+        semaphore.acquire()
+
+        yield from yielder(fname, semaphore)
+
+
 def main():
     args = get_args()
     encoder = Encoder(args)
@@ -174,7 +194,11 @@ def main():
     semaphore = Semaphore(10000 + args.workers)
 
     # use multiprocessing to iterate over input documents
-    fin = yield_from_files(args.input.split(","), semaphore)
+    # fin = yield_from_files(args.input.split(","), semaphore)
+    #@lsp
+    mydata_files = [os.path.join(args.input, f) for f in os.listdir(args.input) if f.endswith('.txt')]
+    print(f'mydata_files: {mydata_files}')
+    fin = yield_from_files_icl(mydata_files, semaphore)
 
     if args.workers > 1:
         pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
