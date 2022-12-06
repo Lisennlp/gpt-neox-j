@@ -461,6 +461,8 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
         )
     else:
         neox_args.iteration = 0
+    for k, v in  model.named_parameters():
+        print(f'k: {k} v: {v.sum()}')
 
     return model, optimizer, lr_scheduler
 

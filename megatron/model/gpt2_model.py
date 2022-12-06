@@ -73,7 +73,8 @@ def cross_entropy(output, labels, _fp16=False):
 def _pre_transformer_block(args):
     # data format change for hidden_states to avoid explicit tranposes : [b s h] --> [s b h]
     assert len(args) == 2, "Incorrect number of arguments to _pre_transformer_block"
-    fn = lambda _args: (_args[0].transpose(0, 1).contiguous(), *_args[1:])
+    # fn = lambda _args: (_args[0].transpose(0, 1).contiguous(), *_args[1:])
+    fn = lambda _args: (_args[0].contiguous(), *_args[1:])
     return fn(args)
 
 
@@ -81,7 +82,8 @@ def _post_transformer_block(args):
     # from (hidden_states, attention_mask)
     # to (hidden_states.T)
     assert len(args) == 2, "Incorrect number of arguments to _post_transformer_block"
-    fn = lambda _args: (_args[0].transpose(0, 1).contiguous())
+    # fn = lambda _args: (_args[0].transpose(0, 1).contiguous())
+    fn = lambda _args: (_args[0].contiguous())
     return fn(args)
 
 

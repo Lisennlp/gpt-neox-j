@@ -40,6 +40,8 @@ from megatron.model.fused_bias_dropout import (
 )
 from megatron.model.utils import configure_sparse_attention
 
+from megatron import print_rank_0, mpu
+
 # flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
@@ -681,6 +683,7 @@ class ParallelTransformerLayerPipe(GPT2Block):
             len(args) == 2
         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
         hidden_states, attention_mask = args
+        # print_rank_0(f'hidden_states: {hidden_states} sum: {hidden_states.sum().item()} shape: {hidden_states.shape}')
         return super().forward(hidden_states, attention_mask=None)[0], attention_mask # lsp
 
 

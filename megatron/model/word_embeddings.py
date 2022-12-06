@@ -116,7 +116,9 @@ class Embedding(torch.nn.Module):
 
     def forward(self, input_ids, position_ids, tokentype_ids=None):
         # Embeddings.
+        # print(f'input_ids: {input_ids}')
         words_embeddings = self.word_embeddings(input_ids)
+
         if self.use_pos_emb and self.embedding_type in ["learned", "sinusoidal"]:
             #@lsp
             position_embeddings = self.position_embeddings(position_ids)
@@ -128,7 +130,8 @@ class Embedding(torch.nn.Module):
             embeddings = embeddings + self.tokentype_embeddings(tokentype_ids)
         else:
             assert self.tokentype_embeddings is None
-
+        # print(f'position_embeddings: {position_embeddings}')
+        # print(f'embeddings: {embeddings}')
         # Dropout.
         embeddings = self.embedding_dropout(embeddings)
         return embeddings
