@@ -34,6 +34,7 @@ from megatron.utils import (
     init_wandb,
     get_ltor_masks_and_position_ids,
     reduce_losses,
+    get_ltor_masks_and_position_ids_,
 )
 
 
@@ -44,7 +45,7 @@ from megatron.model import (
     get_params_for_weight_decay_optimization,
 )
 from megatron.checkpointing import load_checkpoint, save_checkpoint
-from megatron.data.data_utils import build_train_valid_test_data_iterators
+from megatron.data.data_utils import build_train_valid_test_data_iterators, metaicl_dataloader
 from megatron.initialize import initialize_megatron
 from megatron.learning_rates import AnnealingLR
 from megatron.logging import tb_wandb_log, training_log
@@ -90,11 +91,29 @@ def pretrain(neox_args):
 
     # Data stuff.
     timers("train/valid/test data iterators").start()
-    (
-        train_data_iterator,
-        valid_data_iterator,
-        test_data_iterator,
-    ) = build_train_valid_test_data_iterators(neox_args=neox_args)
+
+    if neox_args.icl_or_neo == 'icl':
+        # @lsp-data====================
+        (
+            train_data_iterator,
+            valid_data_iterator,
+            test_data_iterator,
+        ) = metaicl_dataloader(neox_args=neox_args)
+        #@lsp-data====================
+    else:
+        (
+            train_data_iterator,
+            valid_data_iterator,
+            test_data_iterator,
+        ) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # # 单train，valid，test文件时
+        # neox_args.data_path = neox_args.train_data_path
+        # (train_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # neox_args.data_path = neox_args.valid_data_path
+        # (valid_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # neox_args.data_path = neox_args.test_data_path
+        # (test_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+
     timers("train/valid/test data iterators").stop()
 
     # Print setup timing.
@@ -104,6 +123,7 @@ def pretrain(neox_args):
     iteration = 0
 
     prefix = "the start of training for val data"
+    print_rank_0('starting evaluating!!!')
     evaluate_and_print_results(
             neox_args=neox_args,
             prefix=prefix,
@@ -203,17 +223,44 @@ def get_batch(neox_args, data_iterator):
     )
 
 
+def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
+    """Support function for get_batch / get_batch pipe (to avoid code repetition)"""
+    data_b = mpu.broadcast_data(keys, data, datatype)
+    # Unpack.
+    tokens_ = data_b["input_ids"].long()
+    labels = tokens_[:, 1:].contiguous()
+    tokens = tokens_[:, :-1].contiguous()
+
+    loss_mask = data_b["token_type_ids"][:, 1:].bool()
+    attention_mask = data_b["attention_mask"][:, :-1].bool()
+
+    # Get the masks and position ids.
+    position_ids = get_ltor_masks_and_position_ids_(
+        data=tokens,
+        eod_token=0,
+        eod_mask_loss=neox_args.eod_mask_loss,
+    )
+    return tokens, labels, loss_mask, attention_mask, position_ids
+
+
 def get_batch_pipe(data, neox_args):
     """A modification of get_batch() to work with the latest batch instead of an iterator."""
     # Items and their type.
-    keys = ["text"]
     datatype = torch.int64
-
-    tokens, labels, loss_mask, attention_mask, position_ids = _get_batch(
+    # @lsp
+    if neox_args.icl_or_neo == 'icl':
+        keys = ["input_ids", 'attention_mask', 'token_type_ids']
+        tokens, labels, loss_mask, attention_mask, position_ids = _get_batch_icl(
         neox_args, neox_args.tokenizer, keys, data, datatype
-    )
-
-    # unpack data
+        )
+        # loss_mask[:, :attention_mask.sum()] = 1
+        attention_mask = torch.triu(attention_mask.new_ones(attention_mask.shape[1], attention_mask.shape[1]),
+                                       diagonal=1).bool()[None,None,:, :]
+    else:
+        keys = ['text']
+        tokens, labels, loss_mask, attention_mask, position_ids = _get_batch(
+            neox_args, neox_args.tokenizer, keys, data, datatype
+        )
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
@@ -461,9 +508,6 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
         )
     else:
         neox_args.iteration = 0
-    for k, v in  model.named_parameters():
-        print(f'k: {k} v: {v.sum()}')
-
     return model, optimizer, lr_scheduler
 
 

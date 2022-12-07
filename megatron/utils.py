@@ -72,6 +72,20 @@ def get_attn_mask(seq_length, device):
     # convert to binary
     return mask < 0.5
 
+# @lsp
+def get_ltor_masks_and_position_ids_(
+    data,
+    eod_token,
+    eod_mask_loss=False,
+):
+    """Build masks and position id for left to right model."""
+    # Extract batch size and sequence length.
+    batch_size, seq_length = data.size()
+    position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
+    position_ids = position_ids.unsqueeze(0).expand_as(data)
+    # @lsp
+    return position_ids
+    
 
 def get_ltor_masks_and_position_ids(
     data,

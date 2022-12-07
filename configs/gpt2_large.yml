@@ -70,8 +70,8 @@
   },
 
   # batch / data settings (assuming 96 GPUs)
-  "train_micro_batch_size_per_gpu": 4,
-  "gradient_accumulation_steps": 4,
+  "train_micro_batch_size_per_gpu": 1,
+  "gradient_accumulation_steps": 8,
   "data-impl": "mmap",
   "split": "995,4,1",
 
@@ -105,9 +105,9 @@
   "distributed-backend": "nccl",
   "lr-decay-style": "linear",
   "warmup": 0.0,
-  "save-interval": 5000,
-  "eval-interval": 2000,
-  "eval-iters": 10,
+  "save-interval": 15000,
+  "eval-interval": 500,
+  "eval-iters": 100,
 
   # logging
   "log-interval": 10,

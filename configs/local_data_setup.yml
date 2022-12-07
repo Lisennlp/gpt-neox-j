@@ -1,6 +1,8 @@
 # Suggested data paths when using GPT-NeoX locally
 {
-  "data-path": "data/enron/enron_text_document",
+  "icl_or_neo": "icl",
+  # "data-path": "data/enron/enron_text_document",
+  "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized",
 
   # or for weighted datasets:
   # "train-data-paths": ["data/enron/enron_text_document", "data/enron/enron_text_document"],

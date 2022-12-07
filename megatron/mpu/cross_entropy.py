@@ -24,7 +24,6 @@ from .utils import VocabUtility
 class _VocabParallelCrossEntropy(torch.autograd.Function):
     @staticmethod
     def forward(ctx, vocab_parallel_logits, target):
-
         # Maximum value along vocab dimension across all GPUs.
         logits_max = torch.max(vocab_parallel_logits, dim=-1)[0]
         torch.distributed.all_reduce(
@@ -57,6 +56,9 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
         arange_1d = torch.arange(
             start=0, end=logits_2d.size()[0], device=logits_2d.device
         )
+        # print(f'arange_1d: {arange_1d} masked_target_1d: {masked_target_1d} logits_2d: {logits_2d}')
+        # print(f'arange_1dshape: {arange_1d.shape} masked_target_1d: {masked_target_1d.shape} logits_2d: {logits_2d.shape}')
+
         predicted_logits_1d = logits_2d[arange_1d, masked_target_1d]
         predicted_logits_1d = predicted_logits_1d.clone().contiguous()
         predicted_logits = predicted_logits_1d.view_as(target)
