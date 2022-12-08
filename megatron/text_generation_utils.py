@@ -434,8 +434,8 @@ def generate_samples_from_prompt(
     input_count = len(text)
     input_pos = 0
 
-    for k, v in model.named_parameters():
-        print_rank_0(k, v.sum(), rank=0)
+    # for k, v in model.named_parameters():
+    #     print_rank_0(k, v.sum().item(), rank=0)
     # generate completions
     generated_texts = []
     while True:

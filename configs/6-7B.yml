@@ -14,7 +14,7 @@
   "scaled_upper_triang_masked_softmax_fusion": false,
   # "data_path": "./data/enron//mydataset_text_document",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/data/combine_ids",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/other",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/xiaomeng",
   "train_data_path": "data/novel_train_document",
@@ -47,7 +47,7 @@
 
    # optimizer settings
    "optimizer": {
-     "type": "adamw",
+     "type": "adam",
      "params": {
        "lr": 0.00001,
        "betas": [0.9, 0.999],
@@ -62,7 +62,7 @@
     "reduce_scatter": True,
     "reduce_bucket_size": 500000000,
     "contiguous_gradients": True,
-    "cpu_offload": True
+    "cpu_offload": False
   },
 
    # batch / data settings
@@ -99,7 +99,7 @@
    "distributed-backend": "nccl",
    "lr-decay-style": "linear",
    "warmup": 0.0,
-   "save-interval": 10000,
+   "save-interval": 15000,
    "eval-interval": 1000,
    "eval-iters": 100,
 

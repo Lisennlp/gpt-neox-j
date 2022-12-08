@@ -49,6 +49,8 @@ def gpt2_attention_mask_func(attention_scores, ltor_mask):
     return attention_scores
 
 
+import pickle
+
 def cross_entropy(output, labels, _fp16=False):
     """From pretrain_gpt2:forward_step()"""
     """
@@ -59,13 +61,35 @@ def cross_entropy(output, labels, _fp16=False):
         loss = mpu.vocab_parallel_cross_entropy(output.float(), labels)
         return loss
     """
+    def save_pred_result():
+        pred_results_path = '/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/pred_results.pkl'
+        mask_preds = preds.masked_select(loss_mask.bool())
+        mask_labels = labels.masked_select(loss_mask.bool())
+        right = (mask_preds == mask_labels).sum()
+        total = loss_mask.sum()
+        # print(f'right: {right} total: {total}')
+        pred_results = dict()
+        pred_results['loss_mask'] = loss_mask.cpu()
+        pred_results['labels'] = labels.cpu()
+        pred_results['mask_preds'] = mask_preds.cpu()
+        pred_results['mask_labels'] = mask_labels.cpu()
+        pred_results['right'] = right.item()
+        pred_results['total'] = total.item()
+        pred_results['acc'] =  pred_results['right'] / pred_results['total']
+        pickle.dump(pred_results, open(pred_results_path, 'ab'))
+
     labels, loss_mask = labels[0], labels[1]
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
-        losses = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels)
+        # preds: bsz x len, losses: bsz x len
+        losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels)
     else:
-        losses = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
+        losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
+
+    save_pred_result()
+    
     loss_mask = loss_mask.view(-1)
+    # 每个token的平均loss
     loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
     return loss
 

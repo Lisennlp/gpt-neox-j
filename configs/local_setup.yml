@@ -20,7 +20,8 @@
 
   "save": "/nas2/lishengping/gptj_models/",
   # "load": "checkpoints2",
-  "load": "/nas2/lishengping/temp/gptj_layer_weights/",
+  # "load": "/nas2/lishengping/temp/gptj_layer_weights/",
+  "load": "/nas2/lishengping/gptj_models",
   "checkpoint_validation_with_forward_pass": False,
 
   "tensorboard-dir": "tensorboard",
