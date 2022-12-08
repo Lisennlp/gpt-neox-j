@@ -24,6 +24,7 @@ from functools import partial
 
 import math
 import sys
+import os
 
 import torch
 import deepspeed
@@ -73,6 +74,9 @@ def pretrain(neox_args):
         neox_args: an instance of NeoXArgs containing the configuration for pretrain
 
     """
+    if neox_args.only_eval:
+        neox_args.pred_results_dir = os.path.join(neox_args.data_path, 'pred_results')
+
     # setup logging and timers
     init_wandb(neox_args=neox_args)
     timers = Timers(

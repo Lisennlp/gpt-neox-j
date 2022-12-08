@@ -63,7 +63,6 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         return loss
     """
     global count
-
     labels, loss_mask = labels[0], labels[1]
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
@@ -79,6 +78,7 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         total = loss_mask.sum()
         pred_results = dict()
         pred_results_path = f'/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/pred_results/{count}'
+        print(f'pred_results_path: {pred_results_path}')
         pred_results['loss_mask'] = loss_mask.cpu()
         pred_results['labels'] = labels.cpu()
         pred_results['mask_preds'] = mask_preds.cpu()
@@ -145,15 +145,9 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
 
         self.specs = []
         self.init_specs()  # initializes the layer specs (basically a fancy nn.Sequential)
-        pred_results_dir = None
-        if neox_args.only_eval:
-            pred_results_dir = os.path.join(neox_args.data_path, 'pred_results')
-            if not os.path.exists(pred_results_dir):
-                os.makedirs(pred_results_dir)
-
         super().__init__(
             layers=self.specs,
-            loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy, pred_results_dir=pred_results_dir),
+            loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy, pred_results_dir=neox_args.pred_results_dir),
             topology=topology,
             activation_checkpoint_interval=self.neox_args.checkpoint_num_layers
             if self.neox_args.checkpoint_activations
