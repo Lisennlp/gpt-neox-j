@@ -16,13 +16,13 @@
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/data/combine_ids",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class_to_class_test",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/gptj_class_to_class",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/other",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/xiaomeng",
   "train_data_path": "data/novel_train_document",
   "valid_data_path": "data/novel_valid_document",
   # "test_data_path": "data/combine/mydataset_test_document",
-  "only_eval": true,
+  "only_eval": false,
   "icl_or_neo": "icl",
   "output_layer_parallelism": "column",
   #############################
@@ -101,9 +101,9 @@
    "distributed-backend": "nccl",
    "lr-decay-style": "linear",
    "warmup": 0.0,
-   "save-interval": 15000,
-   "eval-interval": 1000,
-   "eval-iters": 100,
+   "save-interval": 5000,
+   "eval-interval": 500,
+   "eval-iters": 200,
 
    # logging
    "log-interval": 50,

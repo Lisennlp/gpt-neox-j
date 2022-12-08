@@ -77,7 +77,7 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         right = (mask_preds == mask_labels).sum()
         total = loss_mask.sum()
         pred_results = dict()
-        pred_results_path = f'/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/pred_results/{count}'
+        pred_results_path = os.path.join(pred_results_dir, str(count))
         print(f'pred_results_path: {pred_results_path}')
         pred_results['loss_mask'] = loss_mask.cpu()
         pred_results['labels'] = labels.cpu()

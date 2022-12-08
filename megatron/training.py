@@ -76,6 +76,8 @@ def pretrain(neox_args):
     """
     if neox_args.only_eval:
         neox_args.pred_results_dir = os.path.join(neox_args.data_path, 'pred_results')
+    else:
+        neox_args.pred_results_dir = None
 
     # setup logging and timers
     init_wandb(neox_args=neox_args)
@@ -639,7 +641,7 @@ def train(
     overflow_monitor = OverflowMonitor(optimizer)
     prefix = "iteration {}".format(iteration)
     # 起始评测
-    neox_args.eval_iters = 100
+    neox_args.eval_iters = 200
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -650,7 +652,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    neox_args.eval_iters = 500
+    neox_args.eval_iters = 400
     if neox_args.only_eval:
         exit(0)
     while iteration < neox_args.train_iters:
