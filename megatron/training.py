@@ -647,6 +647,8 @@ def train(
                 timers=timers,
             )
     neox_args.eval_iters = 500
+    if neox_args.only_eval:
+        exit(0)
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -656,7 +658,6 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-       
         iteration += 1
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable

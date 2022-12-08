@@ -21,6 +21,7 @@
   "valid_data_path": "data/novel_valid_document",
   # "test_data_path": "data/combine/mydataset_test_document",
 
+  "only_eval": true,
   "icl_or_neo": "icl",
   "output_layer_parallelism": "column",
   #############################

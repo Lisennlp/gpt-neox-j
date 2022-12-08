@@ -532,6 +532,7 @@ class NeoXArgsOther(NeoXArgsTemplate):
     Misc. Arguments
     """
     icl_or_neo: str = "icl"
+    only_eval: bool = False
 
     distributed_backend: str = "nccl"
     """
