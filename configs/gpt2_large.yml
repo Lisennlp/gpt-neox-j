@@ -15,7 +15,7 @@
   "activation_function": 'gelu_new',
   "scaled_upper_triang_masked_softmax_fusion": false,
   "make_vocab_size_divisible_by": 1,
-
+  "finetune": true,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
 
   # "load": "./6B-tensor-para-exp_checkpoints-mp8-pp1",
