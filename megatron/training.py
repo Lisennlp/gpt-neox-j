@@ -77,7 +77,7 @@ def pretrain(neox_args):
     """
     neox_args.pred_results_dir = None
     if neox_args.only_eval:
-        pred_results_dir = os.path.join(neox_args.data_path, f'pred_results_{time.time()}')
+        pred_results_dir = os.path.join(neox_args.data_path, f'pred_results')
         if not os.path.exists(pred_results_dir):
             os.mkdir(pred_results_dir)
         neox_args.pred_results_dir = pred_results_dir
@@ -652,28 +652,28 @@ def train(
 
     prefix = "iteration {}".format(iteration)
     # 起始评测
-    neox_args.eval_iters = 100
-    evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=valid_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
+    # neox_args.eval_iters = 100
     # evaluate_and_print_results(
     #             neox_args=neox_args,
     #             prefix=prefix,
     #             forward_step_func=forward_step,
-    #             data_iterator=test_data_iterator,
+    #             data_iterator=valid_data_iterator,
     #             model=model,
     #             iteration=iteration,
     #             verbose=False,
     #             timers=timers,
     #         )
-    # neox_args.eval_iters = 10
+    neox_args.eval_iters = 100
+    evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
     if neox_args.only_eval:
         exit(0)
     while iteration < neox_args.train_iters:
@@ -734,6 +734,7 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
+            neox_args.eval_iters = 160
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -744,6 +745,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
+            neox_args.eval_iters = 80
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
