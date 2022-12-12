@@ -512,9 +512,14 @@ def metaicl_dataloader(neox_args):
     if mpu.get_model_parallel_rank() == 0 and pipe_load:
         batch_size = neox_args.batch_size
         files = os.listdir(neox_args.data_path)
-        train_file_path = [f for f in files if 'train' in f]
+        if neox_args.only_eval:
+            train_file_path = []
+            test_file_path = []
+        else:
+            train_file_path = [f for f in files if 'train' in f]
+            test_file_path = [f for f in files if 'test' in f]
+            
         dev_file_path = [f for f in files if 'dev' in f]
-        test_file_path = [f for f in files if 'test' in f]
         train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]

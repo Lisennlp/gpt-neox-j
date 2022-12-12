@@ -25,6 +25,7 @@ from functools import partial
 import math
 import sys
 import os
+import time
 
 import torch
 import deepspeed
@@ -74,10 +75,12 @@ def pretrain(neox_args):
         neox_args: an instance of NeoXArgs containing the configuration for pretrain
 
     """
+    neox_args.pred_results_dir = None
     if neox_args.only_eval:
-        neox_args.pred_results_dir = os.path.join(neox_args.data_path, 'pred_results')
-    else:
-        neox_args.pred_results_dir = None
+        pred_results_dir = os.path.join(neox_args.data_path, f'pred_results_{time.time()}')
+        if not os.path.exists(pred_results_dir):
+            os.mkdir(pred_results_dir)
+        neox_args.pred_results_dir = pred_results_dir
 
     # setup logging and timers
     init_wandb(neox_args=neox_args)
@@ -107,11 +110,16 @@ def pretrain(neox_args):
         ) = metaicl_dataloader(neox_args=neox_args)
         #@lsp-data====================
     else:
-        # 单train，valid，test文件时
-        neox_args.data_path = neox_args.train_data_path
-        (train_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
-        neox_args.data_path = neox_args.valid_data_path
-        (valid_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        (
+            train_data_iterator,
+            valid_data_iterator,
+            test_data_iterator,
+        ) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # # 单train，valid，test文件时
+        # neox_args.data_path = neox_args.train_data_path
+        # (train_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
+        # neox_args.data_path = neox_args.valid_data_path
+        # (valid_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
         # neox_args.data_path = neox_args.test_data_path
         # (test_data_iterator, _, _,) = build_train_valid_test_data_iterators(neox_args=neox_args)
 
@@ -130,6 +138,7 @@ def pretrain(neox_args):
             lr_scheduler=lr_scheduler,
             train_data_iterator=train_data_iterator,
             valid_data_iterator=valid_data_iterator,
+            test_data_iterator=test_data_iterator,
         )
 
     if neox_args.do_valid:
@@ -195,7 +204,7 @@ def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    loss_mask = data_b["token_type_ids"][:, 1:].bool()
+    loss_mask = data_b["token_type_ids"][:, :-1].bool()
     attention_mask = data_b["attention_mask"][:, :-1].bool()
 
     # Get the masks and position ids.
@@ -619,6 +628,7 @@ def train(
     lr_scheduler,
     train_data_iterator,
     valid_data_iterator,
+    test_data_iterator,
 ):
     """Train the model function."""
 
@@ -639,9 +649,10 @@ def train(
 
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
+
     prefix = "iteration {}".format(iteration)
     # 起始评测
-    neox_args.eval_iters = 200
+    neox_args.eval_iters = 100
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -652,7 +663,17 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    neox_args.eval_iters = 400
+    # evaluate_and_print_results(
+    #             neox_args=neox_args,
+    #             prefix=prefix,
+    #             forward_step_func=forward_step,
+    #             data_iterator=test_data_iterator,
+    #             model=model,
+    #             iteration=iteration,
+    #             verbose=False,
+    #             timers=timers,
+    #         )
+    # neox_args.eval_iters = 10
     if neox_args.only_eval:
         exit(0)
     while iteration < neox_args.train_iters:
@@ -718,6 +739,16 @@ def train(
                 prefix=prefix,
                 forward_step_func=forward_step,
                 data_iterator=valid_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
+            evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
                 model=model,
                 iteration=iteration,
                 verbose=False,

@@ -70,6 +70,9 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels)
     else:
         losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
+     # 每个token的平均loss
+    loss = torch.sum(losses.view(-1) * loss_mask.view(-1)) / loss_mask.sum()
+
     if pred_results_dir is not None:
         # ===================================================
         mask_preds = preds.masked_select(loss_mask.bool())
@@ -85,14 +88,11 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         pred_results['mask_labels'] = mask_labels.cpu()
         pred_results['right'] = right.item()
         pred_results['total'] = total.item()
+        pred_results['loss'] =  loss.item()
         pred_results['acc'] =  pred_results['right'] / pred_results['total']
         pickle.dump(pred_results, open(pred_results_path, 'wb'))
         count += 1
     # ===================================================
-
-    loss_mask = loss_mask.view(-1)
-    # 每个token的平均loss
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
     return loss
 
 
