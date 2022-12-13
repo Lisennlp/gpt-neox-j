@@ -237,7 +237,6 @@ def load_checkpoint(
             load_optimizer_states=load_optim_and_scheduler,
             load_lr_scheduler_states=load_optim_and_scheduler,
             tag=tag,
-            load_module_only=True, #@lsp
         )
 
         if checkpoint_name is None:
