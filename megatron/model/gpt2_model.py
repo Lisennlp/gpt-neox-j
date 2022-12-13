@@ -67,10 +67,13 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
         # preds: bsz x len, losses: bsz x len
-        losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels)
+        losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
     else:
-        losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
+        losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
      # 每个token的平均loss
+    if loss_mask is not None:
+        mask_loss = losses.masked_select(loss_mask.bool())
+        print(f'eval mask loss : {mask_loss.view(-1)}')
     loss = torch.sum(losses.view(-1) * loss_mask.view(-1)) / loss_mask.sum()
 
     if pred_results_dir is not None:

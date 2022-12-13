@@ -1,6 +1,6 @@
 # GPT-2 pretraining setup
 {
-  "gradient_accumulation_steps": 8,
+  "gradient_accumulation_steps": 1,
   ##### gptj_configs, gxh  #####
   "gpt_j_residual": true,
   "world_size": 8,
@@ -19,13 +19,14 @@
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/gptj_class_to_class",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class_to_class_test",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class7_to_class2/new",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/single_class",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class7_to_class2/new",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/other",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/xiaomeng",
   "train_data_path": "data/novel_train_document",
   "valid_data_path": "data/novel_valid_document",
   # "test_data_path": "data/combine/mydataset_test_document",
-  "only_eval": true,
+  "only_eval": false,
   "finetune": true,
   "icl_or_neo": "icl",
   "output_layer_parallelism": "column",
@@ -97,6 +98,7 @@
      "hysteresis": 2,
      "min_loss_scale": 1
    },
+  
 
    # misc. training settings
    "train-iters": 320000, 

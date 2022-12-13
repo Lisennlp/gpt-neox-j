@@ -24,6 +24,8 @@ from .utils import VocabUtility
 class _VocabParallelCrossEntropy(torch.autograd.Function):
     @staticmethod
     def forward(ctx, vocab_parallel_logits, target):
+        loss_mask = target[1]
+        target = target[0]
         # vocab_parallel_logits: b x len x vocab_size
         # Maximum value along vocab dimension across all GPUs.
         # @lsp
@@ -103,7 +105,11 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
         # 这里不太明白
         exp_logits.div_(sum_exp_logits.unsqueeze(dim=-1))
         ctx.save_for_backward(exp_logits, target_mask, masked_target_1d)
-
+        if loss_mask is not None:
+            mask_loss = loss.masked_select(loss_mask.bool())
+            print(f'train mask loss : {mask_loss.view(-1)}')
+        else:
+            print('loss mask is none')
         return loss, preds
 
     @staticmethod
@@ -128,6 +134,6 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
         return grad_input, None
 
 
-def vocab_parallel_cross_entropy(vocab_parallel_logits, target):
+def vocab_parallel_cross_entropy(vocab_parallel_logits, target, loss_mask=None):
     """Helper function for the cross entropy."""
-    return _VocabParallelCrossEntropy.apply(vocab_parallel_logits, target)
+    return _VocabParallelCrossEntropy.apply(vocab_parallel_logits, [target, loss_mask])

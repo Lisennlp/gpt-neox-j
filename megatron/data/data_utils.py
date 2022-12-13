@@ -2,10 +2,9 @@ import math
 import os
 from collections import defaultdict
 import pickle
-
 import numpy as np
 from typing import List, Tuple
-from itertools import zip_longest
+from itertools import zip_longest, cycle
 from functools import partial
 
 import torch
@@ -548,17 +547,17 @@ def metaicl_dataloader(neox_args):
 
     # Build iterators.
     if train_dataloader is not None:
-        train_data_iterator = iter(train_dataloader)
+        train_data_iterator = iter(cycle(train_dataloader))
     else:
         train_data_iterator = None
 
     if valid_dataloader is not None:
-        valid_data_iterator = iter(valid_dataloader)
+        valid_data_iterator = iter(cycle(valid_dataloader))
     else:
         valid_data_iterator = None
 
     if test_dataloader is not None:
-        test_data_iterator = iter(test_dataloader)
+        test_data_iterator = iter(cycle(test_dataloader))
     else:
         test_data_iterator = None
 
