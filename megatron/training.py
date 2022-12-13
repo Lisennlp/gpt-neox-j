@@ -124,6 +124,7 @@ def pretrain(neox_args):
 
     prefix = "the start of training for val data"
     print_rank_0('starting evaluating!!!')
+    neox_args.eval_iters = 1
     evaluate_and_print_results(
             neox_args=neox_args,
             prefix=prefix,
@@ -585,6 +586,7 @@ def train_step_pipe(neox_args, timers, model, data_iterator):
 
     assert neox_args.deepspeed
     loss = model.train_batch(data_iter=data_iterator)
+    print_rank_0(f'train loss: {loss.item()}')
     loss_dict = {"lm_loss": loss}
     # Don't break Megatron's timers because we changed code paths.
     for t in [
@@ -645,6 +647,7 @@ def train(
         # get learning rate (if present) - if doing soft prompt tuning + pipe parallel, you
         # may have no tunable parameters on a specific rank
         if optimizer.param_groups:
+            optimizer.param_groups[0]["lr"] = 0.0001
             lr = optimizer.param_groups[0].get("lr", 0)
         else:
             lr = 0
@@ -686,6 +689,7 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
+            neox_args.eval_iters = 1
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,

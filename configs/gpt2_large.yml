@@ -16,7 +16,10 @@
   "scaled_upper_triang_masked_softmax_fusion": false,
   "make_vocab_size_divisible_by": 1,
   "finetune": true,
-  "precision": "bfloat16",
+  # "precision": "bfloat16",
+  "precision": "fp16",
+
+  "icl_or_neo": "icll",
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
 
   # "load": "./6B-tensor-para-exp_checkpoints-mp8-pp1",
@@ -72,7 +75,7 @@
 
   # batch / data settings (assuming 96 GPUs)
   "train_micro_batch_size_per_gpu": 1,
-  "gradient_accumulation_steps": 8,
+  "gradient_accumulation_steps": 1,
   "data-impl": "mmap",
   "split": "995,4,1",
 
@@ -84,7 +87,7 @@
 
   # regularization
   "gradient_clipping": 1.0,
-  "weight-decay": 0.0, # @lsp
+  "weight-decay": 0.1, # @lsp
   "hidden-dropout": 0,
   "attention-dropout": 0,
 
@@ -107,7 +110,7 @@
   "lr-decay-style": "linear",
   "warmup": 0.0,
   "save-interval": 15000,
-  "eval-interval": 500,
+  "eval-interval": 1,
   "eval-iters": 100,
 
   # logging

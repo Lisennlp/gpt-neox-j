@@ -27,7 +27,7 @@ from megatron.model.utils import Lambda, SequentialWrapper, recursive_setattr
 from megatron.model.norms import get_norm
 from megatron.model.init_functions import get_init_methods
 
-from megatron import mpu
+from megatron import mpu, print_rank_0
 from megatron.mpu import ParallelRelativePositionBias
 from megatron.model.transformer import (
     ParallelTransformerLayerPipe,
@@ -68,6 +68,7 @@ def cross_entropy(output, labels, _fp16=False):
         losses = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
     loss_mask = loss_mask.view(-1)
     loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+    print_rank_0(f'eval loss: {loss.item()}')
     return loss
 
 
