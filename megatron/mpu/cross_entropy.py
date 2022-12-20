@@ -105,11 +105,11 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
         # 这里不太明白
         exp_logits.div_(sum_exp_logits.unsqueeze(dim=-1))
         ctx.save_for_backward(exp_logits, target_mask, masked_target_1d)
-        if loss_mask is not None:
-            mask_loss = loss.masked_select(loss_mask.bool())
-            print(f'train mask loss : {mask_loss.view(-1)}')
-        else:
-            print('loss mask is none')
+        # if loss_mask is not None:
+        #     mask_loss = loss.masked_select(loss_mask.bool())
+        #     print(f'train mask loss : {mask_loss.view(-1)}')
+        # else:
+        #     print('loss mask is none')
         return loss, preds
 
     @staticmethod

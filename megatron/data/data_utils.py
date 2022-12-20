@@ -517,7 +517,7 @@ def metaicl_dataloader(neox_args):
             train_file_path = [f for f in files if 'train' in f]
         test_file_path = [f for f in files if 'test' in f]
         dev_file_path = [f for f in files if 'dev' in f]
-        print(f'dev_file_path: {dev_file_path} test_file_path: {test_file_path}')
+        print(f'dev_file_path: {dev_file_path} test_file_path: {test_file_path} train_file_path: {train_file_path}')
         train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]

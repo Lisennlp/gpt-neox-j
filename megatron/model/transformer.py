@@ -642,9 +642,12 @@ class ParallelTransformerLayer(nn.Module):
             # attention_output = attn(ln1(x))
             residual = x
             hidden_states = self.input_layernorm(x)
+            # print(f'layernorm max: {hidden_states.max().item()} min: {hidden_states.min().item()}')
             attention_output, attention_bias = self.attention(
                 hidden_states, attention_mask, layer_past=layer_past
             )
+            # print(f'attention_output max: {attention_output.max().item()} min: {attention_output.min().item()}')
+
             # print_rank_0(f'attention_output: {attention_output} shape: {attention_output.shape}')
             if self.use_cache:
                 attention_output, presents = attention_output
@@ -660,6 +663,8 @@ class ParallelTransformerLayer(nn.Module):
             # output = mlp(ln2(x)) + attention_output
             # mlp_output, mlp_bias = self.mlp(self.post_attention_layernorm(x))
             mlp_output, mlp_bias = self.mlp(hidden_states)  # @lsp
+            # print(f'mlp_output max: {mlp_output.max().item()} min: {mlp_output.min().item()}')
+
             # mlp_output + bias + dropout + attention_output
             with torch.enable_grad():
                 output = bias_dropout_fn(
@@ -668,7 +673,10 @@ class ParallelTransformerLayer(nn.Module):
                     residual=attention_output,
                     prob=self.hidden_dropout,
                 )
+            # print(f'output0 max: {output.max().item()} min: {output.min().item()}')
             output = residual + self.reduce(output)
+            # print(f'output1 max: {output.max().item()} min: {output.min().item()}')
+
         else:
             # pseudocode:
             # x = x + attn(ln1(x))
@@ -706,17 +714,19 @@ class ParallelTransformerLayer(nn.Module):
 
         return output
 
-
+import pickle
 class ParallelTransformerLayerPipe(ParallelTransformerLayer):
     """Extends ParallelTransformerLayer to forward attention_mask through the pipeline."""
-
     def forward(self, args):
         assert (
             len(args) == 2
         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
         hidden_states, attention_mask = args
         # we are returning just [hidden_states, mask]
-        # print_rank_0(f'hidden_states: {hidden_states} shape: {hidden_states.shape} sum: {hidden_states[:3].sum()}')
+        # print(f'hidden_states shape: {hidden_states.shape} sum: {hidden_states.sum()}')
+        # x = {'hidden_states': hidden_states.cpu(), 'attention_mask': attention_mask.cpu()}
+        # pickle.dump(x, open(f'temp2/{hidden_states.sum().item()}_{hidden_states[0].sum().item()}.pkl', 'wb'))
+        # print(f'hidden_states min: {hidden_states.min()} max: {hidden_states.max()}')
         return super().forward(hidden_states, attention_mask), attention_mask
 
 

@@ -1,6 +1,6 @@
 # GPT-2 pretraining setup
 {
-  "gradient_accumulation_steps": 1,
+  "gradient_accumulation_steps": 8,
   ##### gptj_configs, gxh  #####
   "gpt_j_residual": true,
   "world_size": 8,
@@ -19,15 +19,17 @@
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/gptj_class_to_class",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class_to_class_test",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/single_class",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/single_class",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class7_to_class2/new",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/other",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/xiaomeng",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
   "train_data_path": "data/novel_train_document",
   "valid_data_path": "data/novel_valid_document",
   # "test_data_path": "data/combine/mydataset_test_document",
   "only_eval": false,
   "finetune": true,
+  # 生成的时候为非icl
   "icl_or_neo": "icl",
   "output_layer_parallelism": "column",
   #############################
@@ -85,7 +87,7 @@
 
    # regularization
    "gradient_clipping": 1.0,
-   "weight-decay": 0,
+   "weight-decay": 0.0,
    "hidden-dropout": 0,
    "attention-dropout": 0,
 
@@ -96,10 +98,10 @@
      "loss_scale": 0,
      "loss_scale_window": 1000,
      "hysteresis": 2,
-     "min_loss_scale": 1
+     "min_loss_scale": 0.5 # 1 - 0.5
    },
   
-
+"soft_prompt_tuning": {},
    # misc. training settings
    "train-iters": 320000, 
    #@lsp如果lr-decay-iters is not None num_iters == lr-decay-iters
@@ -107,7 +109,7 @@
    "distributed-backend": "nccl",
    "lr-decay-style": "linear",
    "warmup": 0.0,
-   "save-interval": 5000,
+   "save-interval": 2500,
    "eval-interval": 100,
    "eval-iters": 100,
 

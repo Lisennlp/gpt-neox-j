@@ -331,6 +331,13 @@ def get_model(neox_args, use_cache=False):
             if not "soft_embedding" in name:
                 param.requires_grad = False
 
+    # for name, param in model.named_parameters():
+    #     if 'mlp' not in name:
+    #         param.requires_grad = False
+    #         print(f'not require grad: {name} param: {param.shape}')
+    #     else:
+    #         print(f'require grad: {name} param: {param.shape}')
+
     if not neox_args.is_pipe_parallel:
         # Export PipeParallel model to nn.Sequential model to avoid the overhead of deepspeed's pipe parallel training
         model = model.to_sequential()
@@ -606,7 +613,7 @@ def train_step_pipe(neox_args, timers, model, data_iterator):
     """Single training step with DeepSpeed's pipeline parallel engine."""
     assert neox_args.deepspeed
     loss = model.train_batch(data_iter=data_iterator)
-    print_rank_0(f'train loss: {loss.item()}')
+    # print_rank_0(f'train loss: {loss.item()}')
     loss_dict = {"lm_loss": loss}
     # Don't break Megatron's timers because we changed code paths.
     for t in [
@@ -653,7 +660,7 @@ def train(
 
     prefix = "iteration {}".format(iteration)
     # 起始评测
-    neox_args.eval_iters = 1
+    neox_args.eval_iters = 100
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -664,19 +671,20 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    # neox_args.eval_iters = 10
-    # evaluate_and_print_results(
-    #             neox_args=neox_args,
-    #             prefix=prefix,
-    #             forward_step_func=forward_step,
-    #             data_iterator=test_data_iterator,
-    #             model=model,
-    #             iteration=iteration,
-    #             verbose=False,
-    #             timers=timers,
-    #         )
+    neox_args.eval_iters = 50
+    evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
     if neox_args.only_eval:
         exit(0)
+    neox_args.train_iters = 32000
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -694,6 +702,7 @@ def train(
         # get learning rate (if present) - if doing soft prompt tuning + pipe parallel, you
         # may have no tunable parameters on a specific rank
         if optimizer.param_groups:
+            # optimizer.param_groups[0]["lr"] = 0.000001
             lr = optimizer.param_groups[0].get("lr", 0)
         else:
             lr = 0
@@ -735,7 +744,7 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 1
+            neox_args.eval_iters = 100
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -746,17 +755,17 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-            # neox_args.eval_iters = 80
-            # evaluate_and_print_results(
-            #     neox_args=neox_args,
-            #     prefix=prefix,
-            #     forward_step_func=forward_step,
-            #     data_iterator=test_data_iterator,
-            #     model=model,
-            #     iteration=iteration,
-            #     verbose=False,
-            #     timers=timers,
-            # )
+            neox_args.eval_iters = 50
+            evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
 
         if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
             torch.distributed.barrier()
@@ -815,7 +824,7 @@ def evaluate(
                     neox_args=neox_args,
                     timers=timers,
                 )
-                print_rank_0(f'eval loss: {loss.item()}')
+                # print_rank_0(f'eval loss: {loss.item()}')
                 losses.append(loss)
 
             # When contiguous memory optimizations are enabled, the buffers

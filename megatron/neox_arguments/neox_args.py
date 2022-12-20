@@ -531,6 +531,7 @@ class NeoXArgsOther(NeoXArgsTemplate):
     """
     Misc. Arguments
     """
+    pred_results_dir: str = None
     icl_or_neo: str = "icl"
     only_eval: bool = False
 

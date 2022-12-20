@@ -73,7 +73,7 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
      # 每个token的平均loss
     if loss_mask is not None:
         mask_loss = losses.masked_select(loss_mask.bool())
-        print(f'eval mask loss : {mask_loss.view(-1)}')
+        # print(f'eval mask loss : {mask_loss.view(-1)}')
     loss = torch.sum(losses.view(-1) * loss_mask.view(-1)) / loss_mask.sum()
 
     if pred_results_dir is not None:
