@@ -24,6 +24,7 @@ from functools import partial
 
 import math
 import sys
+import os
 
 import torch
 import deepspeed
@@ -72,6 +73,13 @@ def pretrain(neox_args):
         neox_args: an instance of NeoXArgs containing the configuration for pretrain
 
     """
+    neox_args.pred_results_dir = None
+    if neox_args.only_eval:
+        pred_results_dir = os.path.join(neox_args.data_path, f'pred_results')
+        if not os.path.exists(pred_results_dir):
+            os.mkdir(pred_results_dir)
+        neox_args.pred_results_dir = pred_results_dir
+
     # setup logging and timers
     init_wandb(neox_args=neox_args)
     timers = Timers(
@@ -124,12 +132,23 @@ def pretrain(neox_args):
 
     prefix = "the start of training for val data"
     print_rank_0('starting evaluating!!!')
-    neox_args.eval_iters = 1
+    # neox_args.eval_iters = 100
+    # evaluate_and_print_results(
+    #         neox_args=neox_args,
+    #         prefix=prefix,
+    #         forward_step_func=forward_step,
+    #         data_iterator=valid_data_iterator,
+    #         model=model,
+    #         iteration=iteration,
+    #         verbose=False,
+    #         timers=timers,
+    #     )
+    neox_args.eval_iters = 50
     evaluate_and_print_results(
             neox_args=neox_args,
             prefix=prefix,
             forward_step_func=forward_step,
-            data_iterator=valid_data_iterator,
+            data_iterator=test_data_iterator,
             model=model,
             iteration=iteration,
             verbose=False,
@@ -145,6 +164,7 @@ def pretrain(neox_args):
             lr_scheduler=lr_scheduler,
             train_data_iterator=train_data_iterator,
             valid_data_iterator=valid_data_iterator,
+            test_data_iterator=test_data_iterator,
         )
 
     if neox_args.do_valid:
@@ -586,7 +606,7 @@ def train_step_pipe(neox_args, timers, model, data_iterator):
 
     assert neox_args.deepspeed
     loss = model.train_batch(data_iter=data_iterator)
-    print_rank_0(f'train loss: {loss.item()}')
+    # print_rank_0(f'train loss: {loss.item()}')
     loss_dict = {"lm_loss": loss}
     # Don't break Megatron's timers because we changed code paths.
     for t in [
@@ -609,6 +629,7 @@ def train(
     lr_scheduler,
     train_data_iterator,
     valid_data_iterator,
+    test_data_iterator,
 ):
     """Train the model function."""
 
@@ -629,6 +650,9 @@ def train(
 
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
+    neox_args.train_iters = 32000
+    if neox_args.only_eval:
+        exit(0)
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -689,12 +713,23 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 1
+            neox_args.eval_iters = 100
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
                 forward_step_func=forward_step,
                 data_iterator=valid_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
+            neox_args.eval_iters = 50
+            evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
                 model=model,
                 iteration=iteration,
                 verbose=False,

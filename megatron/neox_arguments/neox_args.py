@@ -99,7 +99,6 @@ class NeoXArgsModel(NeoXArgsTemplate):
     """
     Model Arguments
     """
-
     precision: Literal["fp16", "fp32", "bfloat16"] = None
     """
     description of the used precision, either one of fp16 or fp32 (and in the future bf16).
@@ -530,6 +529,7 @@ class NeoXArgsOther(NeoXArgsTemplate):
     """
     Misc. Arguments
     """
+    only_eval: bool = False
     icl_or_neo: str = "icl"
 
     distributed_backend: str = "nccl"

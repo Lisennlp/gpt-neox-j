@@ -18,6 +18,7 @@
 """GPT-2 model."""
 
 import math
+import os
 import torch
 import torch.nn as nn
 from collections import defaultdict
@@ -48,8 +49,10 @@ def gpt2_attention_mask_func(attention_scores, ltor_mask):
     attention_scores.masked_fill_(ltor_mask, -10000.0)
     return attention_scores
 
+import pickle
+count = 0
 
-def cross_entropy(output, labels, _fp16=False):
+def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
     """From pretrain_gpt2:forward_step()"""
     """
     if self.fp16_lm_cross_entropy:
@@ -59,16 +62,40 @@ def cross_entropy(output, labels, _fp16=False):
         loss = mpu.vocab_parallel_cross_entropy(output.float(), labels)
         return loss
     """
+    global count
     labels, loss_mask = labels[0], labels[1]
-    # print(f'labels: {labels.shape} loss_mask: {loss_mask.shape}')
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
-        losses = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels)
+        # preds: bsz x len, losses: bsz x len
+        losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
     else:
-        losses = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
-    loss_mask = loss_mask.view(-1)
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-    print_rank_0(f'eval loss: {loss.item()}')
+        losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
+     # 每个token的平均loss
+    if loss_mask is not None:
+        mask_loss = losses.masked_select(loss_mask.bool())
+        # print(f'eval mask loss : {mask_loss.view(-1)}')
+    loss = torch.sum(losses.view(-1) * loss_mask.view(-1)) / loss_mask.sum()
+
+    if pred_results_dir is not None:
+        # ===================================================
+        mask_preds = preds.masked_select(loss_mask.bool())
+        mask_labels = labels.masked_select(loss_mask.bool())
+        right = (mask_preds == mask_labels).sum()
+        total = loss_mask.sum()
+        pred_results = dict()
+        pred_results_path = os.path.join(pred_results_dir, str(count))
+        print(f'pred_results_path: {pred_results_path} loss: {loss.item()}')
+        pred_results['loss_mask'] = loss_mask.cpu()
+        pred_results['labels'] = labels.cpu()
+        pred_results['mask_preds'] = mask_preds.cpu()
+        pred_results['mask_labels'] = mask_labels.cpu()
+        pred_results['right'] = right.item()
+        pred_results['total'] = total.item()
+        pred_results['loss'] =  loss.item()
+        pred_results['acc'] =  pred_results['right'] / pred_results['total']
+        pickle.dump(pred_results, open(pred_results_path, 'wb'))
+        count += 1
+    # ===================================================
     return loss
 
 
@@ -126,7 +153,7 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
 
         super().__init__(
             layers=self.specs,
-            loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy),
+            loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy, pred_results_dir=neox_args.pred_results_dir),
             topology=topology,
             activation_checkpoint_interval=self.neox_args.checkpoint_num_layers
             if self.neox_args.checkpoint_activations

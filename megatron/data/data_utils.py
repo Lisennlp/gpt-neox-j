@@ -17,6 +17,7 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.gpt2_dataset import GPT2Dataset
 from megatron.data.samplers import DistributedBatchSampler
+from itertools import cycle
 
 
 
@@ -542,17 +543,17 @@ def metaicl_dataloader(neox_args):
 
     # Build iterators.
     if train_dataloader is not None:
-        train_data_iterator = iter(train_dataloader)
+        train_data_iterator = iter(cycle(train_dataloader))
     else:
         train_data_iterator = None
 
     if valid_dataloader is not None:
-        valid_data_iterator = iter(valid_dataloader)
+        valid_data_iterator = iter(cycle(valid_dataloader))
     else:
         valid_data_iterator = None
 
     if test_dataloader is not None:
-        test_data_iterator = iter(test_dataloader)
+        test_data_iterator = iter(cycle(test_dataloader))
     else:
         test_data_iterator = None
 
