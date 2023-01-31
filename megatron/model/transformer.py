@@ -70,6 +70,17 @@ torch._C._jit_override_can_fuse_on_gpu(True)
 """
 
 
+token_len = 5800000
+def delsp(x, n, length_dim=2):
+    if x is None:
+        print(f'{n} is None')
+        return ''
+    if length_dim == 2:
+        print(f'{n}: {x[0, :token_len]}, sum: {x[0, :token_len].sum()} max: {x[0, :token_len].max()} min: {x[0, :token_len].min()} shape: {x[0].shape}\n')
+    else:
+        print(f'{n}: {x[0, :, :token_len]}, sum: {x[0, :, :token_len].sum()} max: {x[0, :, :token_len].max()} min: {x[0, :, :token_len].min()} shape: {x[0].shape}\n')
+
+
 class ParallelMLP(nn.Module):
     """MLP.
 
@@ -676,14 +687,21 @@ class ParallelTransformerLayer(nn.Module):
 # from transformers.models.gpt2_model import GPT2Block
 from transformers.models.gpt2.modeling_gpt2 import GPT2Block 
 
-
+# print(f'attnout: {attn_output} sum: {attn_output.sum()} shape: {attn_output.shape}')
 class ParallelTransformerLayerPipe(GPT2Block):
     def forward(self, args):
         assert (
             len(args) == 2
         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
         hidden_states, attention_mask = args
-        # print_rank_0(f'hidden_states: {hidden_states} sum: {hidden_states.sum().item()} shape: {hidden_states.shape}')
+        # print_rank_0(f'hidden_states0000: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=0)
+        # print_rank_0(f'hidden_states1111: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=1)
+        # print_rank_0(f'hidden_states2222: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=2)
+        # print_rank_0(f'hidden_states3333: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=3)
+        # print_rank_0(f'hidden_states4444: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=4)
+        # print_rank_0(f'hidden_states5555: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=5)
+        # print_rank_0(f'hidden_states6666: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=6)
+        # print_rank_0(f'hidden_states7777: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=7)
         return super().forward(hidden_states, attention_mask=None)[0], attention_mask # lsp
 
 
@@ -710,22 +728,35 @@ class NormPipe(nn.Module):
         assert not isinstance(
             args, tuple
         ), "NormPipe should only receive a single tensor as input"
-        return self.norm(args)
+        # delsp(args, 'normbefore')
+        import pickle
+        # pickle.dump(args, open('/nas/lishengping/caiyun_projects/gpt_neox/debug/normbefore.pkl', 'wb'))
+        norm_r = self.norm(args)
+        # delsp(norm_r, 'normafter')
+        # pickle.dump(norm_r, open('/nas/lishengping/caiyun_projects/gpt_neox/debug/normafter.pkl', 'wb'))
+        return norm_r
+
 
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output, bias=None):
     """LM logits using word embedding weights."""
     # Parallel logits.
+    import pickle
+    # delsp(input_, 'input_')
+    # delsp(word_embeddings_weight, 'word_embeddings_weight')
     input_parallel = mpu.copy_to_model_parallel_region(input_)
-
     # Matrix multiply.
     if bias is None:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight)
+        # pickle.dump(input_parallel.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/input_parallel.pkl', 'wb'))
+        # pickle.dump(word_embeddings_weight.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/word_embeddings_weight.pkl', 'wb'))
+        # pickle.dump(logits_parallel.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/logits_parallel.pkl', 'wb'))
+        # delsp(word_embeddings_weight, 'word_embeddings_weight')
+        # delsp(input_parallel, 'input_parallel')
+        # delsp(logits_parallel, 'logits_parallel')
     else:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight, bias)
-
     # Gather if needed.
     if parallel_output:
         return logits_parallel
-
     return mpu.gather_from_model_parallel_region(logits_parallel)

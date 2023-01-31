@@ -9,19 +9,24 @@
   "n_embd": 1280,    
   "n_ctx": 1024,
   "layer_norm_epsilon": 0.00001,
-  "attn_pdrop": 0.0,
-  "resid_pdrop": 0.0,
+  "attn_pdrop": 0.1,
+  "resid_pdrop": 0.1,
+  "embd_pdrop": 0.1,
   "rotary_dim": 64,
   "activation_function": 'gelu_new',
   "scaled_upper_triang_masked_softmax_fusion": false,
   "make_vocab_size_divisible_by": 1,
   "finetune": true,
   # "precision": "bfloat16",
-  # "precision": "fp16",
-
+  # "precision": "fp32"
+  "seed": 1234,
   "icl_or_neo": "icl",
-  "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
-  "only_eval": true,
+  # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
+  # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen_len768/eval",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
+  
+  "only_eval": false,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
 
   # "load": "./6B-tensor-para-exp_checkpoints-mp8-pp1",
@@ -38,7 +43,7 @@
   "num-layers": 36,
   "hidden-size": 1280,
   "num-attention-heads": 20,
-  "seq-length": 1024,
+  "seq-length": 959,
   "max-position-embeddings": 1024,
   "norm": "layernorm",
   "pos-emb": "learned", # @lsp
@@ -48,17 +53,17 @@
   "output_layer_parallelism": "column",
   "scaled-upper-triang-masked-softmax-fusion": true,
   "bias-gelu-fusion": true,
-
   # init methods
   "init_method": "small_init",
   "output_layer_init_method": "wang_init",
 
   # optimizer settings
   "optimizer": {
-    "type": "Adam",
+    "type": "adam",
+    "max_grad_norm": 1.0, 
     "params": {
       "lr": 0.00001,
-      "betas": [0.9, 0.999],
+      "betas": [0.9, 0.995],
       "eps": 1.0e-8,
       }
       },
@@ -82,14 +87,14 @@
   "split": "995,4,1",
 
   # activation checkpointing
-  "checkpoint-activations": true,
+  "checkpoint-activations": false,
   "checkpoint-num-layers": 1,
   "partition-activations": false,
   "synchronize-each-layer": true,
 
   # regularization
   "gradient_clipping": 1.0,
-  "weight-decay": 0.1, # @lsp
+  "weight-decay": 0, # @lsp
   "hidden-dropout": 0,
   "attention-dropout": 0,
 
@@ -99,7 +104,7 @@
     "enabled": true,
     "loss_scale": 0,
     "loss_scale_window": 1000,
-    "initial_scale_power": 12,
+    "initial_scale_power": 0, #lsp 1 -> 0, 初始loss_scale 2 ** 0
     "hysteresis": 2,
     "min_loss_scale": 1
     },
@@ -125,3 +130,22 @@
   #"tensorboard-dir": "./tensorboard",
   #"log-dir": "./logs",
 }
+
+
+# pickle.dump(query.cpu(), open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hq_{lsp}.pkl', 'wb'))
+# pickle.dump(query.cpu(), open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hq_{lsp}.pkl', 'wb'))
+
+# import pickle
+# import time
+# curtime = time.time_ns()
+# r = {'attnout': attn_output.cpu(), 'attnweights': attn_weights.cpu(), 'key': key.cpu(), 'value': value.cpu(), 'query': query.cpu()}
+# pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hugg_cattn.{curtime}', 'wb'))
+
+
+# curtime = time.time_ns()
+#         r = {'attn_output': attn_output.cpu()}
+#         pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/neox_attn_output.{curtime}', 'wb'))
+
+# curtime = time.time_ns()
+#         r = {'ln2hidden': hidden_states.cpu(), 'ln2w': self.ln_2.weight.data.cpu(), 'ln2b': self.ln_2.bias.data.cpu()}
+#         pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/neox_ln2hidden.{curtime}', 'wb'))

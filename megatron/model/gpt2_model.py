@@ -52,6 +52,7 @@ def gpt2_attention_mask_func(attention_scores, ltor_mask):
 import pickle
 count = 0
 
+loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
 def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
     """From pretrain_gpt2:forward_step()"""
     """
@@ -62,18 +63,28 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         loss = mpu.vocab_parallel_cross_entropy(output.float(), labels)
         return loss
     """
+    # o = {'output': output.cpu(), 'labels': labels}
+    # pickle.dump(o, open('/nas/lishengping/caiyun_projects/gpt_neox/debug/output_logits_labels.pkl', 'wb'))
+
+    # train和eval都是使用的这个loss函数
     global count
     labels, loss_mask = labels[0], labels[1]
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
         # preds: bsz x len, losses: bsz x len
-        losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
+        losses = loss_fn(output.contiguous(), labels)
+        # losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
     else:
-        losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
+        # 走这
+        # print(f'output: {output.shape} labels: {labels.shape}')
+        # preds: bsz x len, losses: bsz x len
+        losses = loss_fn(output.view(-1, output.size(-1)).contiguous(), labels.view(-1))
+        # losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
      # 每个token的平均loss
     if loss_mask is not None:
         mask_loss = losses.masked_select(loss_mask.bool())
-        # print(f'eval mask loss : {mask_loss.view(-1)}')
+        # print(f'mask loss : {mask_loss.view(-1)}')
+        # print(f'loss_mask : {loss_mask.view(-1)}')
     loss = torch.sum(losses.view(-1) * loss_mask.view(-1)) / loss_mask.sum()
 
     if pred_results_dir is not None:
@@ -95,6 +106,7 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         pred_results['acc'] =  pred_results['right'] / pred_results['total']
         pickle.dump(pred_results, open(pred_results_path, 'wb'))
         count += 1
+        print(f'mask_preds: {mask_preds.tolist()} mask_labels: {mask_labels.tolist()}')
     # ===================================================
     return loss
 
@@ -154,7 +166,7 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
         super().__init__(
             layers=self.specs,
             loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy, pred_results_dir=neox_args.pred_results_dir),
-            topology=topology,
+            topology=topology,  # 控制stage的id
             activation_checkpoint_interval=self.neox_args.checkpoint_num_layers
             if self.neox_args.checkpoint_activations
             else 0,
@@ -201,7 +213,7 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
 
         # Embedding layer
         # input will be (input_ids, position_ids, attention_mask)
-
+        self.neox_args.hidden_dropout = self.neox_args.embd_pdrop
         if weight_tying:
             self.specs.append(
                 TiedLayerSpec(
@@ -218,6 +230,8 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
                 )
             )
         else:
+            # LayerSpec作用是把第二个及之后的参数传递给第一个参数
+            # 见https://github.com/microsoft/DeepSpeed/blob/b8fb9c3f1a8a8e3e574a7d53e83ce2b72d471aa3/deepspeed/runtime/pipe/module.py#L23 63行
             self.specs.append(
                 LayerSpec(
                     EmbeddingPipe,
@@ -393,3 +407,10 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
             parent_class_name=self.__class__.__name__,
         )
         return model
+
+
+# import pickle
+# import time
+# curtime = time.time_ns()
+# r = {'residual': residual.cpu(), 'ln1after': hidden_states.cpu(), 'ln1w': self.ln_1.weight.data.cpu(), 'ln1b': self.ln_1.bias.data.cpu()}
+# pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hugg_ln1after.{curtime}', 'wb'))

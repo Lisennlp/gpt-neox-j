@@ -5,7 +5,7 @@
   "text-gen-type": "input-file",
 
   # Params for all
-  "maximum_tokens": 102,
+  "maximum_tokens": 1,
   "temperature": 0,
   "top_p": 0.0,
   "top_k": 0,
@@ -15,6 +15,6 @@
   "num-samples": 10,
 
   # input/output file
-  "sample-input-file": "sample_input.txt",
-  "sample-output-file": "sample_output.txt",
+  "sample-input-file": "sample_input2.txt",
+  "sample-output-file": "sample_output2.txt",
 }

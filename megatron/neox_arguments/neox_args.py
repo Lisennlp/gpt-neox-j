@@ -529,6 +529,7 @@ class NeoXArgsOther(NeoXArgsTemplate):
     """
     Misc. Arguments
     """
+    embd_pdrop: float = 0.1
     only_eval: bool = False
     icl_or_neo: str = "icl"
 

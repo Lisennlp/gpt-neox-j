@@ -17,8 +17,11 @@
   "vocab-file": "data/gpt2-vocab.json",
   "merge-file": "data/gpt2-merges.txt",
 
-  "save": "checkpoints",
-  "load": "/nas2/lishengping/gpt2_large_layers",
+  "save": "/nas/lishengping/caiyun_projects/gpt_neox/checkpoints",
+  # "load": "/nas2/lishengping/gpt2_large_layers",
+  "load": "/nas2/lishengping/gpt2_large_layers/global_step1",
+  # "load": "/nas/lishengping/caiyun_projects/gpt_neox/checkpoints",
+
   "checkpoint_validation_with_forward_pass": False,
 
   "tensorboard-dir": "tensorboard",

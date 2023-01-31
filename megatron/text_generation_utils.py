@@ -71,6 +71,7 @@ def pad_batch(context_tokens: List[List[int]], pad_id: int, pad_len: int):
         elif context_length > pad_len:
             raise ValueError("context_length is bigger than to be padded length")
         context_lengths.append(context_length)
+    print(f'context_lengths: {context_lengths} pad_id: {pad_id}')
     return context_tokens, context_lengths
 
 
@@ -318,6 +319,9 @@ def stream_tokens(
             if logits is not None:
                 # sample token id of the to be generated token
                 if temperature == 0.0 and top_k == 0 and top_p == 0.0:
+                    print(f'generated_token_logits: {generated_token_logits}')
+                    import pickle
+                    pickle.dump(generated_token_logits.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/generated_token_logits.pkl', 'wb'))
                     generated_tokens = torch.argmax(
                         generated_token_logits, dim=-1
                     ).view(-1)
@@ -578,10 +582,14 @@ def generate_samples_input_from_file(
     print_rank_0(
         "generate_samples_input_from_file() loading input from {}".format(input_file)
     )
+    # with open(input_file, "r") as f:
+    #     prompts = f.readlines()
+    # prompts = [p.strip() for p in prompts]
+    # prompts = [p for p in prompts if len(p) > 0]
     with open(input_file, "r") as f:
-        prompts = f.readlines()
-    prompts = [p.strip() for p in prompts]
-    prompts = [p for p in prompts if len(p) > 0]
+        for line in f:
+            line = json.loads(line)
+    prompts = [line['text']]   
     print_rank_0(
         "generate_samples_input_from_file() prompts loaded: {}".format(len(prompts))
     )

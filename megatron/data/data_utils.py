@@ -493,6 +493,7 @@ def get_batch_data(data_dir, f, batch_size):
             for key in data:
                 t = np.array(data[key][i: (i + 1) * batch_size])
                 batch_data[key] = torch.from_numpy(t)
+            # print(f'batch_data: {batch_data}')
             yield batch_data
 
 
@@ -514,6 +515,10 @@ def metaicl_dataloader(neox_args):
         train_file_path = [f for f in files if 'train' in f]
         dev_file_path = [f for f in files if 'dev' in f]
         test_file_path = [f for f in files if 'test' in f]
+        print(f'train_file_path: {train_file_path}')
+        print(f'dev_file_path: {dev_file_path}')
+        print(f'test_file_path: {test_file_path}')
+
         train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
@@ -558,3 +563,10 @@ def metaicl_dataloader(neox_args):
         test_data_iterator = None
 
     return train_data_iterator, valid_data_iterator, test_data_iterator
+
+
+    #  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m torch.distributed.launch --nproc_per_node=8 train.py --task class_to_class --k 16384 --test_k 16 --seed 100 --train_seed 1234 --use_demonstrations --method direct --n_gpu 8 --batch_size 1 --fp16 --optimization adamw --out_dir checkpoints/class_to_class_all --init_checkpoint /nas2/lishengping/caiyun_projects/MetaICL/checkpoints/class_to_class/filter2000/model-0.pt --tensorize_dir /nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/icl --lr 0 |tee test.log
+
+    #  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m torch.distributed.launch --nproc_per_node=8 train.py --task class_to_class --k 16384 --test_k 16 --seed 100 --train_seed 1234 --use_demonstrations --method direct --n_gpu 8 --batch_size 1 --fp16 --optimization adamw --out_dir checkpoints/class_to_class_all --init_checkpoint /nas/lishengping/caiyun_projects/gpt_neox/checkpoints/model-0.pt --tensorize_dir /nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/icl --lr 0 |tee test.log
+
+     

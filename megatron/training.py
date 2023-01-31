@@ -87,14 +87,20 @@ def pretrain(neox_args):
     )
 
     # Initialize and get arguments, timers, and Tensorboard writer.
-    initialize_megatron(neox_args=neox_args)
+    initialize_megatron(neox_args=neox_args) # 设置每个model的seed，并初始化topology（可以获取每个rank编号，stage id等等）
     print_rank_0(f'iters nums: {neox_args.train_iters}')
 
     # Model, optimizer, and learning rate.
     timers("model and optimizer").start()
+    # 将model和optimizer分在每个卡上
     model, optimizer, lr_scheduler = setup_model_and_optimizer(
         neox_args=neox_args, use_cache=False
     )
+   
+    for k, v in model.named_parameters():
+        print_rank_0(k, v.shape, v.sum().item(), v.dtype, rank=0)
+    #     print_rank_0(k, v.shape, v.sum().item(), rank=7)
+
     timers("model and optimizer").stop()
 
     # Data stuff.
@@ -132,7 +138,7 @@ def pretrain(neox_args):
 
     prefix = "the start of training for val data"
     print_rank_0('starting evaluating!!!')
-    # neox_args.eval_iters = 100
+    # neox_args.eval_iters = 1
     # evaluate_and_print_results(
     #         neox_args=neox_args,
     #         prefix=prefix,
@@ -143,17 +149,20 @@ def pretrain(neox_args):
     #         verbose=False,
     #         timers=timers,
     #     )
-    neox_args.eval_iters = 50
-    evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=test_data_iterator,
-            model=model,
-            iteration=iteration,
-            verbose=False,
-            timers=timers,
-        )
+    # neox_args.eval_iters = 100
+    # evaluate_and_print_results(
+    #         neox_args=neox_args,
+    #         prefix=prefix,
+    #         forward_step_func=forward_step,
+    #         data_iterator=test_data_iterator,
+    #         model=model,
+    #         iteration=iteration,
+    #         verbose=False,
+    #         timers=timers,
+    #     )
+    if neox_args.only_eval:
+        exit(0)
+
     print_rank_0("training ...")
     if neox_args.do_train and neox_args.train_iters > 0:
         iteration = train(
@@ -167,41 +176,41 @@ def pretrain(neox_args):
             test_data_iterator=test_data_iterator,
         )
 
-    if neox_args.do_valid:
-        prefix = "the end of training for val data"
-        evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=valid_data_iterator,
-            model=model,
-            iteration=iteration,
-            verbose=False,
-            timers=timers,
-        )
+    # if neox_args.do_valid:
+    #     prefix = "the end of training for val data"
+    #     evaluate_and_print_results(
+    #         neox_args=neox_args,
+    #         prefix=prefix,
+    #         forward_step_func=forward_step,
+    #         data_iterator=valid_data_iterator,
+    #         model=model,
+    #         iteration=iteration,
+    #         verbose=False,
+    #         timers=timers,
+    #     )
 
-    if neox_args.save and iteration != 0:
-        save_checkpoint(
-            neox_args=neox_args,
-            iteration=iteration,
-            model=model,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-        )
+    # if neox_args.save and iteration != 0:
+    #     save_checkpoint(
+    #         neox_args=neox_args,
+    #         iteration=iteration,
+    #         model=model,
+    #         optimizer=optimizer,
+    #         lr_scheduler=lr_scheduler,
+    #     )
 
-    if neox_args.do_test:
-        # Run on test data.
-        prefix = "the end of training for test data"
-        evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=test_data_iterator,
-            model=model,
-            iteration=0,  # iteration 0 in order to always use full test data
-            verbose=True,
-            timers=timers,
-        )
+    # if neox_args.do_test:
+    #     # Run on test data.
+    #     prefix = "the end of training for test data"
+    #     evaluate_and_print_results(
+    #         neox_args=neox_args,
+    #         prefix=prefix,
+    #         forward_step_func=forward_step,
+    #         data_iterator=test_data_iterator,
+    #         model=model,
+    #         iteration=0,  # iteration 0 in order to always use full test data
+    #         verbose=True,
+    #         timers=timers,
+    #     )
 
 
 def _get_batch(neox_args, tokenizer, keys, data, datatype):
@@ -252,7 +261,8 @@ def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    loss_mask = data_b["token_type_ids"][:, 1:].bool()
+    # loss_mask = data_b["token_type_ids"][:, 1:].bool()
+    loss_mask = data_b["token_type_ids"][:, :-1].bool()
     attention_mask = data_b["attention_mask"][:, :-1].bool()
 
     # Get the masks and position ids.
@@ -283,6 +293,7 @@ def get_batch_pipe(data, neox_args):
             neox_args, neox_args.tokenizer, keys, data, datatype
         )
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
+    # /Users/lishengping/codes/others/DeepSpeed/deepspeed/runtime/pipe/engine.py line 789
 
 
 def forward_step(data_iterator, model, neox_args, timers, return_logits=False):
@@ -313,7 +324,7 @@ def get_model(neox_args, use_cache=False):
 
     print_rank_0("building GPT2 model ...")
 
-    # Build model on cpu.
+    # Build model on cpu. 将model变成pipe model
     model = GPT2ModelPipe(
         neox_args=neox_args,
         num_tokentypes=0,
@@ -357,7 +368,7 @@ def get_optimizer(model, neox_args):
     """Set up the optimizer."""
     if neox_args.no_load_optim:
         return None, None
-    # Build parameter groups (weight decay and non-decay).
+    # Build parameter groups (weight decay and non-decay). list 分配参数的decay
     param_groups = get_params_for_weight_decay_optimization(model, neox_args)
     print_rank_0(
         f'Configuring Optimizer type: {neox_args.optimizer_type} with params: {neox_args.optimizer["params"]}'
@@ -379,6 +390,7 @@ def get_optimizer(model, neox_args):
 
     if neox_args.optimizer_type.lower() in ["cpu_adam", "cpu_torch_adam"]:
         if neox_args.optimizer == "cpu_torch_adam":
+            print(f'优化器类型: cpu_torch_adam')
             cpu_adam_optimizer = torch.optim.Adam
         else:
             from deepspeed.ops.adam import DeepSpeedCPUAdam
@@ -405,6 +417,7 @@ def get_optimizer(model, neox_args):
             weight_decay=neox_args.weight_decay,
             **neox_args.optimizer["params"],
         )
+    # 走这
     elif neox_args.optimizer_type.lower() == "adam":
         # Use Adam
         if neox_args.use_bnb_optimizer:
@@ -419,19 +432,21 @@ def get_optimizer(model, neox_args):
                 raise Exception
         else:
             try:
-                # default to apex as it's slightly faster
+                # default to apex as it's slightly faster，使用FuseAdam
                 from apex.optimizers import FusedAdam as Adam
+                print(f'优化器：apex的FuseAdam')
             except ImportError:
                 # if apex isn't installed, use deepspeed's FusedAdam
                 print(
                     "WARNING: APEX not installed - defaulting to deepspeed's fused adam"
                 )
                 from deepspeed.ops.adam import FusedAdam as Adam
+                print(f'优化器：deepspeed的FuseAdam')
             adam_optimizer = Adam
         optimizer = adam_optimizer(
             param_groups,
             weight_decay=neox_args.weight_decay,
-            **neox_args.optimizer["params"],
+            **neox_args.optimizer["params"], # 获取lr，beta，eps等
         )
     else:
         raise ValueError(f"Optimizer type {neox_args.optimizer_type} not recognized")
@@ -480,13 +495,16 @@ def get_learning_rate_scheduler(optimizer, neox_args):
 
 def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     """Setup model and optimizer."""
+    # pipeline model，已经分层了
     model = get_model(neox_args=neox_args, use_cache=use_cache)
     for k, v in model.named_parameters():
-        # print_rank_0(k, v.shape, v.sum().item(), rank=0)
-        print_rank_0(k, v.shape, v.sum().item(), rank=7)
+        print_rank_0(k, v.shape, v.sum().item(), v.dtype, rank=7)
+    # 当加载预训练模型时
+    model.load_state_dir(neox_args.load)
+    # model.half()
+    # 每个卡的model拥有自己的optimizer
     optimizer, param_groups = get_optimizer(model=model, neox_args=neox_args)
     lr_scheduler = get_learning_rate_scheduler(optimizer=optimizer, neox_args=neox_args)
-
     if neox_args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")
         if neox_args.no_load_optim:
@@ -496,7 +514,9 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
         else:
             _model_params = param_groups if optimizer is None else None
             _lr_scheduler = lr_scheduler
-
+        
+        # 初始化为pipeline engine 
+        # /nas2/kf/miniconda3/envs/pytorch1.10/lib/python3.8/site-packages/deepspeed/__init__.py
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
             model=model,
             optimizer=optimizer,
@@ -516,19 +536,20 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     else:
         raise ValueError("Must be using deepspeed to run neox")
 
-    if neox_args.load is not None:
-        neox_args.iteration = load_checkpoint(
-            neox_args=neox_args,
-            model=model,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-            iteration=iteration,
-        )
-        print_rank_0(
-            f"Loading checkpoint and starting from iteration {neox_args.iteration}"
-        )
-    else:
-        neox_args.iteration = 0
+    # 当保存了中间步骤时应该走这
+    # if neox_args.load is not None:
+    #     neox_args.iteration = load_checkpoint(
+    #         neox_args=neox_args,
+    #         model=model,
+    #         optimizer=optimizer,
+    #         lr_scheduler=lr_scheduler,
+    #         iteration=iteration,
+    #     )
+    #     print_rank_0(
+    #         f"Loading checkpoint and starting from iteration {neox_args.iteration}"
+    #     )
+    # else:
+    #     neox_args.iteration = 0
     return model, optimizer, lr_scheduler
 
 
@@ -605,7 +626,14 @@ def train_step_pipe(neox_args, timers, model, data_iterator):
     """Single training step with DeepSpeed's pipeline parallel engine."""
 
     assert neox_args.deepspeed
+    # /Users/lishengping/codes/others/DeepSpeed/deepspeed/runtime/pipe/schedule.py控制每一步的forward顺序
     loss = model.train_batch(data_iter=data_iterator)
+    # for k, v in model.module.named_parameters():
+    #     if v.grad is not None:
+    #         print_rank_0(f'name: {k} grad: {v.grad.data} shape: {v.grad.data.shape}')
+    #     else:
+    #         print(f'nograd name: {k}')
+            # print_rank_0(k, v.grad.data, v.grad.data.shape)
     # print_rank_0(f'train loss: {loss.item()}')
     loss_dict = {"lm_loss": loss}
     # Don't break Megatron's timers because we changed code paths.
@@ -635,6 +663,8 @@ def train(
 
     # Turn on training mode which enables dropout.
     model.train()
+    # model.eval()
+
 
     # Tracking loss.
     total_loss_dict = {}
@@ -650,9 +680,8 @@ def train(
 
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
-    neox_args.train_iters = 32000
-    if neox_args.only_eval:
-        exit(0)
+    neox_args.train_iters = 10
+    iteration = 0
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -662,6 +691,8 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
+        print(f'loss_dict: {loss_dict}')
+        # exit(0)
         iteration += 1
 
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
@@ -671,7 +702,7 @@ def train(
         # get learning rate (if present) - if doing soft prompt tuning + pipe parallel, you
         # may have no tunable parameters on a specific rank
         if optimizer.param_groups:
-            optimizer.param_groups[0]["lr"] = 0.0001
+            optimizer.param_groups[0]["lr"] = 1e-10
             lr = optimizer.param_groups[0].get("lr", 0)
         else:
             lr = 0
@@ -693,18 +724,18 @@ def train(
         )
 
         # Checkpointing
-        if (
-            neox_args.save
-            and neox_args.save_interval
-            and iteration % neox_args.save_interval == 0
-        ):
-            save_checkpoint(
-                neox_args=neox_args,
-                iteration=iteration,
-                model=model,
-                optimizer=optimizer,
-                lr_scheduler=lr_scheduler,
-            )
+        # if (
+        #     neox_args.save
+        #     and neox_args.save_interval
+        #     and iteration % neox_args.save_interval == 0
+        # ):
+        #     save_checkpoint(
+        #         neox_args=neox_args,
+        #         iteration=iteration,
+        #         model=model,
+        #         optimizer=optimizer,
+        #         lr_scheduler=lr_scheduler,
+        #     )
 
         # Evaluation
         if (
@@ -712,40 +743,41 @@ def train(
             and iteration % neox_args.eval_interval == 0
             and neox_args.do_valid
         ):
-            prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 100
-            evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=valid_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
-            neox_args.eval_iters = 50
-            evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=test_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
+            # prefix = "iteration {}".format(iteration)
+            # neox_args.eval_iters = 100
+            # evaluate_and_print_results(
+            #     neox_args=neox_args,
+            #     prefix=prefix,
+            #     forward_step_func=forward_step,
+            #     data_iterator=valid_data_iterator,
+            #     model=model,
+            #     iteration=iteration,
+            #     verbose=False,
+            #     timers=timers,
+            # )
+            # neox_args.eval_iters = 1
+            # evaluate_and_print_results(
+            #     neox_args=neox_args,
+            #     prefix=prefix,
+            #     forward_step_func=forward_step,
+            #     data_iterator=test_data_iterator,
+            #     model=model,
+            #     iteration=iteration,
+            #     verbose=False,
+            #     timers=timers,
+            # )
+            pass
 
-        if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
-            torch.distributed.barrier()
-            time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            rank = torch.distributed.get_rank()
-            print_rank_0(
-                "rank: {} | time: {} | exiting the program at iteration {}".format(
-                    rank, time_str, iteration
-                )
-            )
-            sys.exit()
+        # if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
+        #     torch.distributed.barrier()
+        #     time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        #     rank = torch.distributed.get_rank()
+        #     print_rank_0(
+        #         "rank: {} | time: {} | exiting the program at iteration {}".format(
+        #             rank, time_str, iteration
+        #         )
+        #     )
+        #     sys.exit()
 
     return iteration
 

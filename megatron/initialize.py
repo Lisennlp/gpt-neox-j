@@ -155,7 +155,7 @@ def _initialize_distributed(neox_args):
             verbose=True,
         )
 
-    # Setup 3D topology.
+    # Setup 3D topology. pp=8,mp=1
     pp = neox_args.pipe_parallel_size if neox_args.pipe_parallel_size >= 1 else 1
     mp = neox_args.model_parallel_size if neox_args.model_parallel_size >= 1 else 1
     assert (
@@ -170,8 +170,8 @@ def _initialize_distributed(neox_args):
     topo = PipeModelDataParallelTopology(num_pp=pp, num_mp=mp, num_dp=dp)
 
     # Offset base seeds for the interior pipeline stages.
-    # TODO: adjust last stage too once IO is improved.
-    stage_id = topo.get_coord(rank=torch.distributed.get_rank()).pipe
+    # TODO: adjust last stage too once IO is improved. ProcessCoord(pipe=0, data=0, model=0) ... ProcessCoord(pipe=7, data=0, model=0)
+    stage_id = topo.get_coord(rank=torch.distributed.get_rank()).pipe  # .pipe 获取pipe编号
     if 0 < stage_id < topo.get_dim("pipe") - 1:
         offset = neox_args.seed + 1138
         neox_args.seed = offset + (stage_id * mp)

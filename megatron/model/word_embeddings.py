@@ -7,6 +7,17 @@ from megatron.model.positional_embeddings import SinusoidalPositionalEmbedding
 from megatron.model.init_functions import get_init_methods
 
 
+token_len = 5800000
+def delsp(x, n, length_dim=2):
+    if x is None:
+        print(f'{n} is None')
+        return ''
+    if length_dim == 2:
+        print(f'{n}: {x[0, :token_len]}, sum: {x[0, :token_len].sum()} max: {x[0, :token_len].max()} min: {x[0, :token_len].min()} shape: {x[0].shape}\n')
+    else:
+        print(f'{n}: {x[0, :, :token_len]}, sum: {x[0, :, :token_len].sum()} max: {x[0, :, :token_len].max()} min: {x[0, :, :token_len].min()} shape: {x[0].shape}\n')
+
+
 class Embedding(torch.nn.Module):
     """Language model embeddings.
     Arguments:
@@ -116,7 +127,8 @@ class Embedding(torch.nn.Module):
 
     def forward(self, input_ids, position_ids, tokentype_ids=None):
         # Embeddings.
-        # print(f'input_ids: {input_ids}')
+        import pickle
+        pickle.dump(input_ids.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/input_ids.pkl', 'wb'))
         words_embeddings = self.word_embeddings(input_ids)
 
         if self.use_pos_emb and self.embedding_type in ["learned", "sinusoidal"]:
@@ -130,8 +142,7 @@ class Embedding(torch.nn.Module):
             embeddings = embeddings + self.tokentype_embeddings(tokentype_ids)
         else:
             assert self.tokentype_embeddings is None
-        # print(f'position_embeddings: {position_embeddings}')
-        # print(f'embeddings: {embeddings}')
+
         # Dropout.
         embeddings = self.embedding_dropout(embeddings)
         return embeddings
@@ -149,11 +160,14 @@ class EmbeddingPipe(Embedding):
         assert (
             len(args) == 3
         ), f"Expected 3 arguments (input_ids, position_ids, attention_mask), but got {len(args)}."
-
+        # 对应batch[0]
         input_ids = args[0]
         position_ids = args[1]
         attention_mask = args[2]
         embeddings = super().forward(input_ids, position_ids)
+        import pickle
+        pickle.dump(embeddings.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/wordembed.pkl', 'wb'))
+        # print(f'embeddings: {embeddings} shape: {embeddings.shape} sum: {embeddings.sum()}')
         return embeddings, attention_mask
 
 

@@ -27,6 +27,10 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
     def forward(ctx, vocab_parallel_logits, target):
         loss_mask = target[1]
         target = target[0]
+        print(f'vocab_parallel_logits: {vocab_parallel_logits.shape}')
+        print(f'loss_mask: {loss_mask.shape}')
+        print(f'target: {target.shape}')
+
         # vocab_parallel_logits: b x len x vocab_size
         # Maximum value along vocab dimension across all GPUs.
         # @lsp
@@ -73,6 +77,10 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
             start=0, end=logits_2d.size()[0], device=logits_2d.device
         )
         # masked_target_1d: b x 1024; logits_2d: (b * 1024) x vocab_size
+        print(f'arange_1d: {arange_1d.shape}')
+        print(f'masked_target_1d: {masked_target_1d.shape}')
+        print(f'logits_2d: {logits_2d.shape}')
+
         predicted_logits_1d = logits_2d[arange_1d, masked_target_1d]
         predicted_logits_1d = predicted_logits_1d.clone().contiguous()
         # target： b x 1024，将predicted_logits_1d恢复到2维， predicted_logits： b x 1024
@@ -104,7 +112,7 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
 
         # Store softmax, target-mask and masked-target for backward pass.
         # 这里不太明白
-        exp_logits.div_(sum_exp_logits.unsqueeze(dim=-1))
+        exp_logits.div_(sum_exp_logits.unsqueeze(dim=-1)) # 做softmax
         ctx.save_for_backward(exp_logits, target_mask, masked_target_1d)
         # if loss_mask is not None:
         #     mask_loss = loss.masked_select(loss_mask.bool())
@@ -115,22 +123,27 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output, preds=None):
+        print(f'grad_output: {grad_output}')
+
 
         # Retrieve tensors from the forward path.
         softmax, target_mask, masked_target_1d = ctx.saved_tensors
 
         # All the inputs have softmax as their gradient.
         grad_input = softmax
-        # For simplicity, work with the 2D gradient.
-        partition_vocab_size = softmax.size()[-1]
-        grad_2d = grad_input.view(-1, partition_vocab_size)
+        # print(f'grad_input: {grad_input}')
 
-        # Add the gradient from matching classes.
-        arange_1d = torch.arange(start=0, end=grad_2d.size()[0], device=grad_2d.device)
-        grad_2d[arange_1d, masked_target_1d] -= 1.0 - target_mask.view(-1).float()
+        # # For simplicity, work with the 2D gradient.
+        # partition_vocab_size = softmax.size()[-1]
+        # grad_2d = grad_input.view(-1, partition_vocab_size)
+
+        # # Add the gradient from matching classes.
+        # arange_1d = torch.arange(start=0, end=grad_2d.size()[0], device=grad_2d.device)
+        # grad_2d[arange_1d, masked_target_1d] -= 1.0 - target_mask.view(-1).float()
 
         # Finally elementwise multiplication with the output gradients.
         grad_input.mul_(grad_output.unsqueeze(dim=-1))
+        print(f'grad_input2: {grad_input}')
 
         return grad_input, None
 
