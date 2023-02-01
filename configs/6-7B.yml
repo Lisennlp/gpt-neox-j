@@ -27,7 +27,7 @@
   "train_data_path": "data/novel_train_document",
   "valid_data_path": "data/novel_valid_document",
   # "test_data_path": "data/combine/mydataset_test_document",
-  "only_eval": false,
+  "only_eval": true,
   "finetune": true,
   # 生成的时候为非icl
   "icl_or_neo": "icl",
@@ -59,7 +59,7 @@
      "type": "adam",
      "params": {
        "lr": 0.00001,
-       "betas": [0.9, 0.999],
+       "betas": [0.9, 0.995],
        "eps": 1.0e-8,
      }
    },
@@ -87,21 +87,23 @@
 
    # regularization
    "gradient_clipping": 1.0,
-   "weight-decay": 0.0,
+   "weight-decay": 0.1,
    "hidden-dropout": 0,
    "attention-dropout": 0,
 
    # precision settings
-   "fp16": {
-     "fp16": true,
-     "enabled": true,
-     "loss_scale": 0,
-     "loss_scale_window": 1000,
-     "hysteresis": 2,
-     "min_loss_scale": 0.5 # 1 - 0.5
-   },
+# precision settings
+  "fp16": {
+    "fp16": true,
+    "enabled": true,
+    "loss_scale": 0,
+    "loss_scale_window": 1000,
+    "initial_scale_power": 0, #lsp 1 -> 0, 初始loss_scale 2 ** 0
+    "hysteresis": 2,
+    "min_loss_scale": 1
+    },
   
-"soft_prompt_tuning": {},
+  "soft_prompt_tuning": {},
    # misc. training settings
    "train-iters": 320000, 
    #@lsp如果lr-decay-iters is not None num_iters == lr-decay-iters
@@ -110,8 +112,8 @@
    "lr-decay-style": "linear",
    "warmup": 0.0,
    "save-interval": 2500,
-   "eval-interval": 100,
-   "eval-iters": 100,
+   "eval-interval": 20,
+   "eval-iters": 50,
 
    # logging
    "log-interval": 50,

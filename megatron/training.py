@@ -481,6 +481,10 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     for k, v in model.named_parameters():
         print_rank_0(k, v.shape, rank=0)
         print_rank_0(k, v.shape, rank=7)
+    #@lsp
+    model.load_state_dir(neox_args.load)
+    neox_args.iteration = 0
+
     optimizer, param_groups = get_optimizer(model=model, neox_args=neox_args)
     lr_scheduler = get_learning_rate_scheduler(optimizer=optimizer, neox_args=neox_args)
 
@@ -520,20 +524,20 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
     #     print(f'save model finished=========')
 
 
-    if neox_args.load is not None:
+    # if neox_args.load is not None:
   
-        neox_args.iteration = load_checkpoint(
-                neox_args=neox_args,
-                model=model,
-                optimizer=optimizer,
-                lr_scheduler=lr_scheduler,
-                iteration=iteration,
-            )
-        print_rank_0(
-            f"Loading checkpoint and starting from iteration {neox_args.iteration}"
-        )
-    else:
-        neox_args.iteration = 0
+    #     neox_args.iteration = load_checkpoint(
+    #             neox_args=neox_args,
+    #             model=model,
+    #             optimizer=optimizer,
+    #             lr_scheduler=lr_scheduler,
+    #             iteration=iteration,
+    #         )
+    #     print_rank_0(
+    #         f"Loading checkpoint and starting from iteration {neox_args.iteration}"
+    #     )
+    # else:
+    #     neox_args.iteration = 0
     print(f'mode init finished')
     
     
@@ -671,17 +675,17 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    neox_args.eval_iters = 50
-    evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=test_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
+    # neox_args.eval_iters = 50
+    # evaluate_and_print_results(
+    #             neox_args=neox_args,
+    #             prefix=prefix,
+    #             forward_step_func=forward_step,
+    #             data_iterator=test_data_iterator,
+    #             model=model,
+    #             iteration=iteration,
+    #             verbose=False,
+    #             timers=timers,
+    #         )
     if neox_args.only_eval:
         exit(0)
     neox_args.train_iters = 32000
@@ -702,7 +706,6 @@ def train(
         # get learning rate (if present) - if doing soft prompt tuning + pipe parallel, you
         # may have no tunable parameters on a specific rank
         if optimizer.param_groups:
-            # optimizer.param_groups[0]["lr"] = 0.000001
             lr = optimizer.param_groups[0].get("lr", 0)
         else:
             lr = 0
