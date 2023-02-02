@@ -22,9 +22,9 @@
   "seed": 1234,
   "icl_or_neo": "icl",
   # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
-  # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen_len768/eval",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   
   "only_eval": false,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
@@ -43,7 +43,7 @@
   "num-layers": 36,
   "hidden-size": 1280,
   "num-attention-heads": 20,
-  "seq-length": 959,
+  "seq-length": 1024,
   "max-position-embeddings": 1024,
   "norm": "layernorm",
   "pos-emb": "learned", # @lsp
@@ -68,7 +68,7 @@
       }
       },
 
-  "min_lr": 0.0,
+  "min_lr": 0.0000001,
   "zero_optimization": {
   "stage": 1,
   "allgather_partitions": True,
@@ -82,7 +82,7 @@
 
   # batch / data settings (assuming 96 GPUs)
   "train_micro_batch_size_per_gpu": 1,
-  "gradient_accumulation_steps": 1,
+  "gradient_accumulation_steps": 8,
   "data-impl": "mmap",
   "split": "995,4,1",
 
@@ -111,7 +111,7 @@
 
   # misc. training settings
   "train-iters": 320000,
-  "lr-decay-iters": 0,
+  "lr-decay-iters": 320000,
 
   "distributed-backend": "nccl",
   "lr-decay-style": "linear",

@@ -680,7 +680,7 @@ def train(
 
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
-    neox_args.train_iters = 10
+    # neox_args.train_iters = 100
     iteration = 0
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
@@ -691,7 +691,7 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-        print(f'loss_dict: {loss_dict}')
+        # print_rank_0(f'loss_dict: {loss_dict["lm_loss"].item()}')
         # exit(0)
         iteration += 1
 
@@ -702,7 +702,7 @@ def train(
         # get learning rate (if present) - if doing soft prompt tuning + pipe parallel, you
         # may have no tunable parameters on a specific rank
         if optimizer.param_groups:
-            optimizer.param_groups[0]["lr"] = 1e-10
+            # optimizer.param_groups[0]["lr"] = 1e-10
             lr = optimizer.param_groups[0].get("lr", 0)
         else:
             lr = 0
@@ -724,18 +724,18 @@ def train(
         )
 
         # Checkpointing
-        # if (
-        #     neox_args.save
-        #     and neox_args.save_interval
-        #     and iteration % neox_args.save_interval == 0
-        # ):
-        #     save_checkpoint(
-        #         neox_args=neox_args,
-        #         iteration=iteration,
-        #         model=model,
-        #         optimizer=optimizer,
-        #         lr_scheduler=lr_scheduler,
-        #     )
+        if (
+            neox_args.save
+            and neox_args.save_interval
+            and iteration % neox_args.save_interval == 0
+        ):
+            save_checkpoint(
+                neox_args=neox_args,
+                iteration=iteration,
+                model=model,
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+            )
 
         # Evaluation
         if (
@@ -743,41 +743,40 @@ def train(
             and iteration % neox_args.eval_interval == 0
             and neox_args.do_valid
         ):
-            # prefix = "iteration {}".format(iteration)
-            # neox_args.eval_iters = 100
-            # evaluate_and_print_results(
-            #     neox_args=neox_args,
-            #     prefix=prefix,
-            #     forward_step_func=forward_step,
-            #     data_iterator=valid_data_iterator,
-            #     model=model,
-            #     iteration=iteration,
-            #     verbose=False,
-            #     timers=timers,
-            # )
-            # neox_args.eval_iters = 1
-            # evaluate_and_print_results(
-            #     neox_args=neox_args,
-            #     prefix=prefix,
-            #     forward_step_func=forward_step,
-            #     data_iterator=test_data_iterator,
-            #     model=model,
-            #     iteration=iteration,
-            #     verbose=False,
-            #     timers=timers,
-            # )
-            pass
+            prefix = "iteration {}".format(iteration)
+            neox_args.eval_iters = 100
+            evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=valid_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
+            neox_args.eval_iters = 50
+            evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
 
-        # if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
-        #     torch.distributed.barrier()
-        #     time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        #     rank = torch.distributed.get_rank()
-        #     print_rank_0(
-        #         "rank: {} | time: {} | exiting the program at iteration {}".format(
-        #             rank, time_str, iteration
-        #         )
-        #     )
-        #     sys.exit()
+        if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
+            torch.distributed.barrier()
+            time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            rank = torch.distributed.get_rank()
+            print_rank_0(
+                "rank: {} | time: {} | exiting the program at iteration {}".format(
+                    rank, time_str, iteration
+                )
+            )
+            sys.exit()
 
     return iteration
 
