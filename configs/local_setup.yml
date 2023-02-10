@@ -20,8 +20,8 @@
 
   "save": "/nas2/lishengping/temp/gptj_layer_weights/",
   # 加载预训练，无optimizer状态
-  # "load": "/nas2/lishengping/temp/gptj_layer_weights/global_step1",
-  "load": "/nas2/lishengping/temp/gptj_layer_weights/global_step2500",
+  "load": "/nas2/lishengping/temp/gptj_layer_weights/global_step1",
+  # "load": "/nas2/lishengping/temp/gptj_layer_weights/global_step2500",
   # 加载保存了optimizer状态的模型
   # "load": "/nas2/lishengping/gptj_models",
   "checkpoint_validation_with_forward_pass": False,

@@ -675,20 +675,20 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    # neox_args.eval_iters = 50
-    # evaluate_and_print_results(
-    #             neox_args=neox_args,
-    #             prefix=prefix,
-    #             forward_step_func=forward_step,
-    #             data_iterator=test_data_iterator,
-    #             model=model,
-    #             iteration=iteration,
-    #             verbose=False,
-    #             timers=timers,
-    #         )
+    neox_args.eval_iters = 50
+    evaluate_and_print_results(
+                neox_args=neox_args,
+                prefix=prefix,
+                forward_step_func=forward_step,
+                data_iterator=test_data_iterator,
+                model=model,
+                iteration=iteration,
+                verbose=False,
+                timers=timers,
+            )
     if neox_args.only_eval:
         exit(0)
-    neox_args.train_iters = 32000
+    # neox_args.train_iters = 32000
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -698,6 +698,7 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
+        # print_rank_0(f'loss_dict: {loss_dict}', rank=7)
         iteration += 1
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable
@@ -780,7 +781,6 @@ def train(
                 )
             )
             sys.exit()
-        # exit(0)
 
     return iteration
 

@@ -24,10 +24,11 @@
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/other",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/xiaomeng",
   "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   "train_data_path": "data/novel_train_document",
   "valid_data_path": "data/novel_valid_document",
   # "test_data_path": "data/combine/mydataset_test_document",
-  "only_eval": true,
+  "only_eval": false,
   "finetune": true,
   # 生成的时候为非icl
   "icl_or_neo": "icl",
@@ -43,7 +44,7 @@
    "num-layers": 28,    # gxh, 32->28
    "hidden-size": 4096,
    "num-attention-heads": 16,    # gxh, 32->16
-   "seq-length": 1024,  # @lsp 2048 -> 1024
+   "seq-length": 768,  # @lsp 2048 -> 1024
    "max-position-embeddings": 2048,
    "norm": "layernorm",
    "pos-emb": "rotary",
@@ -97,22 +98,22 @@
     "fp16": true,
     "enabled": true,
     "loss_scale": 0,
-    "loss_scale_window": 1000,
+    "loss_scale_window": 100,
     "initial_scale_power": 0, #lsp 1 -> 0, 初始loss_scale 2 ** 0
     "hysteresis": 2,
     "min_loss_scale": 1
     },
   
-  "soft_prompt_tuning": {},
+  # "soft_prompt_tuning": {},
    # misc. training settings
-   "train-iters": 320000, 
+   "train-iters": 52000, 
    #@lsp如果lr-decay-iters is not None num_iters == lr-decay-iters
-   "lr-decay-iters": 320000,
+   "lr-decay-iters": 52000,
    "distributed-backend": "nccl",
    "lr-decay-style": "linear",
    "warmup": 0.0,
    "save-interval": 2500,
-   "eval-interval": 20,
+   "eval-interval": 250,
    "eval-iters": 50,
 
    # logging

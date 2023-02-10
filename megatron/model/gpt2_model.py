@@ -52,6 +52,8 @@ def gpt2_attention_mask_func(attention_scores, ltor_mask):
 import pickle
 count = 0
 
+loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
+
 def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
     """From pretrain_gpt2:forward_step()"""
     """
@@ -67,9 +69,13 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
         # preds: bsz x len, losses: bsz x len
-        losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
+        # losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
+        losses = loss_fn(output.contiguous(), labels)
     else:
-        losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
+        # losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
+        # print(f'output: {output.shape}')
+        # print(f'labels: {labels}')
+        losses = loss_fn(output.view(-1, output.size(-1)).contiguous(), labels.view(-1))
      # 每个token的平均loss
     if loss_mask is not None:
         mask_loss = losses.masked_select(loss_mask.bool())
