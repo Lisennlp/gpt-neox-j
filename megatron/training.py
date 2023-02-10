@@ -136,9 +136,9 @@ def pretrain(neox_args):
 
     iteration = 0
 
-    prefix = "the start of training for val data"
-    print_rank_0('starting evaluating!!!')
-    # neox_args.eval_iters = 1
+    # prefix = "the start of training for val data"
+    # print_rank_0('starting evaluating!!!')
+    # neox_args.eval_iters = 50
     # evaluate_and_print_results(
     #         neox_args=neox_args,
     #         prefix=prefix,
@@ -149,7 +149,8 @@ def pretrain(neox_args):
     #         verbose=False,
     #         timers=timers,
     #     )
-    # neox_args.eval_iters = 100
+    # print_rank_0('starting test!!!')
+    # neox_args.eval_iters = 25
     # evaluate_and_print_results(
     #         neox_args=neox_args,
     #         prefix=prefix,
@@ -394,7 +395,6 @@ def get_optimizer(model, neox_args):
             cpu_adam_optimizer = torch.optim.Adam
         else:
             from deepspeed.ops.adam import DeepSpeedCPUAdam
-
             cpu_adam_optimizer = DeepSpeedCPUAdam
         optimizer = cpu_adam_optimizer(
             param_groups,
@@ -431,17 +431,17 @@ def get_optimizer(model, neox_args):
                 )
                 raise Exception
         else:
-            try:
+            # try:
                 # default to apex as it's slightly faster，使用FuseAdam
-                from apex.optimizers import FusedAdam as Adam
-                print(f'优化器：apex的FuseAdam')
-            except ImportError:
-                # if apex isn't installed, use deepspeed's FusedAdam
-                print(
-                    "WARNING: APEX not installed - defaulting to deepspeed's fused adam"
-                )
-                from deepspeed.ops.adam import FusedAdam as Adam
-                print(f'优化器：deepspeed的FuseAdam')
+            #     from apex.optimizers import FusedAdam as Adam
+            #     print(f'优化器：apex的FuseAdam')
+            # except ImportError:
+            #     # if apex isn't installed, use deepspeed's FusedAdam
+            #     print(
+            #         "WARNING: APEX not installed - defaulting to deepspeed's fused adam"
+            #     )
+            from deepspeed.ops.adam import FusedAdam as Adam
+            print(f'优化器：deepspeed的FuseAdam')
             adam_optimizer = Adam
         optimizer = adam_optimizer(
             param_groups,
@@ -517,6 +517,7 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
         
         # 初始化为pipeline engine 
         # /nas2/kf/miniconda3/envs/pytorch1.10/lib/python3.8/site-packages/deepspeed/__init__.py
+        # __import__('ipdb').set_trace()
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
             model=model,
             optimizer=optimizer,
@@ -527,6 +528,7 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
             config_params=neox_args.deepspeed_config,
             mpu=mpu if not neox_args.is_pipe_parallel else None,
         )
+        print(f'-------------')
         model.total_params = get_total_params(model.module)
         print_rank_0(f' > total params: {"{:,}".format(model.total_params)}')
 
@@ -636,6 +638,7 @@ def train_step_pipe(neox_args, timers, model, data_iterator):
             # print_rank_0(k, v.grad.data, v.grad.data.shape)
     # print_rank_0(f'train loss: {loss.item()}')
     loss_dict = {"lm_loss": loss}
+    # print_rank_0(f'loss: {loss.item()}')
     # Don't break Megatron's timers because we changed code paths.
     for t in [
         "forward",
@@ -691,9 +694,13 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-        # print_rank_0(f'loss_dict: {loss_dict["lm_loss"].item()}')
+        # print_rank_0(f'loss_dict: {loss_dict["lm_loss"].item()} dtype: {loss_dict["lm_loss"].dtype}')
         # exit(0)
         iteration += 1
+        # for k, v in model.named_parameters():
+        #     print_rank_0(f'name: {k} v: {v.data}', rank=7)
+        # if iteration > 1:
+        #     sys.exit()
 
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable
@@ -744,7 +751,7 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 100
+            neox_args.eval_iters = 50
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -755,7 +762,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-            neox_args.eval_iters = 50
+            neox_args.eval_iters = 25
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,

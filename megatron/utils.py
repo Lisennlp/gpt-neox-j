@@ -39,9 +39,11 @@ from collections import deque
 
 def reduce_losses(losses):
     """Reduce a tensor of losses across all GPUs."""
-    reduced_losses = torch.cat([loss.clone().detach().view(1) for loss in losses])
+    reduced_losses = torch.cat([loss.clone().detach().view(1).float() for loss in losses])
+    # print(f'reduced_losses000: {reduced_losses}')
     torch.distributed.all_reduce(reduced_losses)
     reduced_losses = reduced_losses / torch.distributed.get_world_size()
+    # print(f'reduced_losses111: {reduced_losses}')
     return reduced_losses
 
 

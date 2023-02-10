@@ -22,9 +22,9 @@
   "seed": 1234,
   "icl_or_neo": "icl",
   # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
-  "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen_len768/eval",
-  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   
   "only_eval": false,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
@@ -43,7 +43,7 @@
   "num-layers": 36,
   "hidden-size": 1280,
   "num-attention-heads": 20,
-  "seq-length": 1024,
+  "seq-length": 768,
   "max-position-embeddings": 1024,
   "norm": "layernorm",
   "pos-emb": "learned", # @lsp
@@ -62,7 +62,7 @@
     "type": "adam",
     "max_grad_norm": 1.0, 
     "params": {
-      "lr": 0.00001,
+      "lr": 0.000001,
       "betas": [0.9, 0.995],
       "eps": 1.0e-8,
       }
@@ -110,8 +110,8 @@
     },
 
   # misc. training settings
-  "train-iters": 320000,
-  "lr-decay-iters": 320000,
+  "train-iters": 32000,
+  "lr-decay-iters": 32000,
 
   "distributed-backend": "nccl",
   "lr-decay-style": "linear",
