@@ -675,7 +675,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    neox_args.eval_iters = 50
+    neox_args.eval_iters = 500
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -698,6 +698,8 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
+        if iteration > 10010:
+            break
         # print_rank_0(f'loss_dict: {loss_dict}', rank=7)
         iteration += 1
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
@@ -759,7 +761,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-            neox_args.eval_iters = 50
+            neox_args.eval_iters = 500
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
