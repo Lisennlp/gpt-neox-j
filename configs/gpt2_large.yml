@@ -22,9 +22,9 @@
   "seed": 1234,
   "icl_or_neo": "icl",
   # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
-  # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen_len768/eval",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   
   "only_eval": false,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
@@ -110,14 +110,14 @@
     },
 
   # misc. training settings
-  "train-iters": 32000,
-  "lr-decay-iters": 32000,
+  "train-iters": 320000,
+  "lr-decay-iters": 320000,
 
   "distributed-backend": "nccl",
   "lr-decay-style": "linear",
   "warmup": 0.0,
   "save-interval": 5000,
-  "eval-interval": 100,
+  "eval-interval": 500,
   "eval-iters": 100,
 
   # logging

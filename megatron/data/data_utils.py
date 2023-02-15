@@ -3,6 +3,8 @@ import math
 import os
 from collections import defaultdict
 import pickle
+import random
+
 
 import numpy as np
 from typing import List, Tuple
@@ -522,6 +524,10 @@ def metaicl_dataloader(neox_args):
         train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+
+        random.shuffle(train_dataloader)
+        random.shuffle(valid_dataloader)
+        random.shuffle(test_dataloader)
     else:
         pass
     
