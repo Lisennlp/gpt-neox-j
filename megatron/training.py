@@ -213,6 +213,11 @@ def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
         eod_token=0,
         eod_mask_loss=neox_args.eod_mask_loss,
     )
+    # print(f'tokens: {tokens.shape}')
+    # print(f'labels: {labels.shape}')
+    # print(f'loss_mask: {loss_mask.shape}')
+    # print(f'attention_mask: {attention_mask.shape}')
+    # print(f'position_ids: {position_ids.shape}')
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 
@@ -664,7 +669,7 @@ def train(
 
     prefix = "iteration {}".format(iteration)
     # 起始评测
-    neox_args.eval_iters = 100
+    neox_args.eval_iters = 152
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -675,7 +680,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-    neox_args.eval_iters = 500
+    neox_args.eval_iters = 272
     evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -688,7 +693,6 @@ def train(
             )
     if neox_args.only_eval:
         exit(0)
-    # neox_args.train_iters = 32000
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -698,9 +702,6 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-        if iteration > 10010:
-            break
-        # print_rank_0(f'loss_dict: {loss_dict}', rank=7)
         iteration += 1
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable

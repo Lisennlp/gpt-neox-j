@@ -23,7 +23,8 @@
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/class7_to_class2/new",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/other",
   # "data_path": "/nas/lishengping/caiyun_projects/gpt_neox/xiaomeng",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/meta_train/",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
   "train_data_path": "data/novel_train_document",
   "valid_data_path": "data/novel_valid_document",
@@ -44,7 +45,7 @@
    "num-layers": 28,    # gxh, 32->28
    "hidden-size": 4096,
    "num-attention-heads": 16,    # gxh, 32->16
-   "seq-length": 768,  # @lsp 2048 -> 1024
+   "seq-length": 1024,  # @lsp 2048 -> 1024
    "max-position-embeddings": 2048,
    "norm": "layernorm",
    "pos-emb": "rotary",
@@ -106,14 +107,14 @@
   
   # "soft_prompt_tuning": {},
    # misc. training settings
-   "train-iters": 52000, 
+   "train-iters": 40000, 
    #@lsp如果lr-decay-iters is not None num_iters == lr-decay-iters
-   "lr-decay-iters": 52000,
+   "lr-decay-iters": 40000,
    "distributed-backend": "nccl",
    "lr-decay-style": "linear",
    "warmup": 0.0,
-   "save-interval": 2500,
-   "eval-interval": 250,
+   "save-interval": 5000,
+   "eval-interval": 500,
    "eval-iters": 50,
 
    # logging
