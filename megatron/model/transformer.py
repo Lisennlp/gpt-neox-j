@@ -728,12 +728,7 @@ class NormPipe(nn.Module):
         assert not isinstance(
             args, tuple
         ), "NormPipe should only receive a single tensor as input"
-        # delsp(args, 'normbefore')
-        import pickle
-        # pickle.dump(args, open('/nas/lishengping/caiyun_projects/gpt_neox/debug/normbefore.pkl', 'wb'))
         norm_r = self.norm(args)
-        # delsp(norm_r, 'normafter')
-        # pickle.dump(norm_r, open('/nas/lishengping/caiyun_projects/gpt_neox/debug/normafter.pkl', 'wb'))
         return norm_r
 
 
@@ -742,18 +737,10 @@ def parallel_lm_logits(input_, word_embeddings_weight, parallel_output, bias=Non
     """LM logits using word embedding weights."""
     # Parallel logits.
     import pickle
-    # delsp(input_, 'input_')
-    # delsp(word_embeddings_weight, 'word_embeddings_weight')
     input_parallel = mpu.copy_to_model_parallel_region(input_)
     # Matrix multiply.
     if bias is None:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight)
-        # pickle.dump(input_parallel.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/input_parallel.pkl', 'wb'))
-        # pickle.dump(word_embeddings_weight.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/word_embeddings_weight.pkl', 'wb'))
-        # pickle.dump(logits_parallel.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/logits_parallel.pkl', 'wb'))
-        # delsp(word_embeddings_weight, 'word_embeddings_weight')
-        # delsp(input_parallel, 'input_parallel')
-        # delsp(logits_parallel, 'logits_parallel')
     else:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight, bias)
     # Gather if needed.

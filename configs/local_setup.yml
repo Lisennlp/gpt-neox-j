@@ -17,7 +17,7 @@
   "vocab-file": "data/gpt2-vocab.json",
   "merge-file": "data/gpt2-merges.txt",
 
-  "save": "/nas/lishengping/caiyun_projects/gpt_neox/checkpoints0214",
+  "save": "/nas2/lishengping/gpt2_large_layers/0216",
   # "load": "/nas2/lishengping/gpt2_large_layers",
   "load": "/nas2/lishengping/gpt2_large_layers/global_step1",
   # "load": "/nas/lishengping/caiyun_projects/gpt_neox/checkpoints",

@@ -319,9 +319,6 @@ def stream_tokens(
             if logits is not None:
                 # sample token id of the to be generated token
                 if temperature == 0.0 and top_k == 0 and top_p == 0.0:
-                    print(f'generated_token_logits: {generated_token_logits}')
-                    import pickle
-                    pickle.dump(generated_token_logits.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/generated_token_logits.pkl', 'wb'))
                     generated_tokens = torch.argmax(
                         generated_token_logits, dim=-1
                     ).view(-1)

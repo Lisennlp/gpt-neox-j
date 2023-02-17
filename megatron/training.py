@@ -136,31 +136,31 @@ def pretrain(neox_args):
 
     iteration = 0
 
-    # prefix = "the start of training for val data"
-    # print_rank_0('starting evaluating!!!')
-    # neox_args.eval_iters = 50
-    # evaluate_and_print_results(
-    #         neox_args=neox_args,
-    #         prefix=prefix,
-    #         forward_step_func=forward_step,
-    #         data_iterator=valid_data_iterator,
-    #         model=model,
-    #         iteration=iteration,
-    #         verbose=False,
-    #         timers=timers,
-    #     )
-    # print_rank_0('starting test!!!')
-    # neox_args.eval_iters = 25
-    # evaluate_and_print_results(
-    #         neox_args=neox_args,
-    #         prefix=prefix,
-    #         forward_step_func=forward_step,
-    #         data_iterator=test_data_iterator,
-    #         model=model,
-    #         iteration=iteration,
-    #         verbose=False,
-    #         timers=timers,
-    #     )
+    prefix = "the start of training for val data"
+    print_rank_0('starting evaluating!!!')
+    neox_args.eval_iters = 151
+    evaluate_and_print_results(
+            neox_args=neox_args,
+            prefix=prefix,
+            forward_step_func=forward_step,
+            data_iterator=valid_data_iterator,
+            model=model,
+            iteration=iteration,
+            verbose=False,
+            timers=timers,
+        )
+    print_rank_0('starting test!!!')
+    neox_args.eval_iters = 272
+    evaluate_and_print_results(
+            neox_args=neox_args,
+            prefix=prefix,
+            forward_step_func=forward_step,
+            data_iterator=test_data_iterator,
+            model=model,
+            iteration=iteration,
+            verbose=False,
+            timers=timers,
+        )
     if neox_args.only_eval:
         exit(0)
 
@@ -683,7 +683,6 @@ def train(
 
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
-    # neox_args.train_iters = 100
     iteration = 0
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
@@ -694,14 +693,7 @@ def train(
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-        # print_rank_0(f'loss_dict: {loss_dict["lm_loss"].item()} dtype: {loss_dict["lm_loss"].dtype}')
-        # exit(0)
         iteration += 1
-        # for k, v in model.named_parameters():
-        #     print_rank_0(f'name: {k} v: {v.data}', rank=7)
-        # if iteration > 1:
-        #     sys.exit()
-
         overflow_monitor.check(skipped_iter)  # check for repeated overflow
         if neox_args.log_gradient_noise_scale:  # log noise scale if applicable
             noise_scale_logger.update()
@@ -751,7 +743,7 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 50
+            neox_args.eval_iters = 151
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,
@@ -762,7 +754,7 @@ def train(
                 verbose=False,
                 timers=timers,
             )
-            neox_args.eval_iters = 25
+            neox_args.eval_iters = 272
             evaluate_and_print_results(
                 neox_args=neox_args,
                 prefix=prefix,

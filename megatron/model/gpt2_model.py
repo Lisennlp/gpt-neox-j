@@ -63,9 +63,6 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         loss = mpu.vocab_parallel_cross_entropy(output.float(), labels)
         return loss
     """
-    # o = {'output': output.cpu(), 'labels': labels}
-    # pickle.dump(o, open('/nas/lishengping/caiyun_projects/gpt_neox/debug/output_logits_labels.pkl', 'wb'))
-
     # train和eval都是使用的这个loss函数
     global count
     labels, loss_mask = labels[0], labels[1]
@@ -407,10 +404,3 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
             parent_class_name=self.__class__.__name__,
         )
         return model
-
-
-# import pickle
-# import time
-# curtime = time.time_ns()
-# r = {'residual': residual.cpu(), 'ln1after': hidden_states.cpu(), 'ln1w': self.ln_1.weight.data.cpu(), 'ln1b': self.ln_1.bias.data.cpu()}
-# pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hugg_ln1after.{curtime}', 'wb'))

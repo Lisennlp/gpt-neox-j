@@ -127,10 +127,7 @@ class Embedding(torch.nn.Module):
 
     def forward(self, input_ids, position_ids, tokentype_ids=None):
         # Embeddings.
-        import pickle
-        pickle.dump(input_ids.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/input_ids.pkl', 'wb'))
         words_embeddings = self.word_embeddings(input_ids)
-
         if self.use_pos_emb and self.embedding_type in ["learned", "sinusoidal"]:
             #@lsp
             position_embeddings = self.position_embeddings(position_ids)
@@ -165,9 +162,6 @@ class EmbeddingPipe(Embedding):
         position_ids = args[1]
         attention_mask = args[2]
         embeddings = super().forward(input_ids, position_ids)
-        import pickle
-        pickle.dump(embeddings.cpu(), open('/nas/lishengping/caiyun_projects/gpt_neox/debug/wordembed.pkl', 'wb'))
-        # print(f'embeddings: {embeddings} shape: {embeddings.shape} sum: {embeddings.sum()}')
         return embeddings, attention_mask
 
 

@@ -22,9 +22,10 @@
   "seed": 1234,
   "icl_or_neo": "icl",
   # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
-  "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
+  # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen_len768/eval",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/meta_train",
   
   "only_eval": false,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
@@ -110,8 +111,8 @@
     },
 
   # misc. training settings
-  "train-iters": 320000,
-  "lr-decay-iters": 320000,
+  "train-iters": 40001,
+  "lr-decay-iters": 40001,
 
   "distributed-backend": "nccl",
   "lr-decay-style": "linear",
@@ -130,22 +131,3 @@
   #"tensorboard-dir": "./tensorboard",
   #"log-dir": "./logs",
 }
-
-
-# pickle.dump(query.cpu(), open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hq_{lsp}.pkl', 'wb'))
-# pickle.dump(query.cpu(), open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hq_{lsp}.pkl', 'wb'))
-
-# import pickle
-# import time
-# curtime = time.time_ns()
-# r = {'attnout': attn_output.cpu(), 'attnweights': attn_weights.cpu(), 'key': key.cpu(), 'value': value.cpu(), 'query': query.cpu()}
-# pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/hugg_cattn.{curtime}', 'wb'))
-
-
-# curtime = time.time_ns()
-#         r = {'attn_output': attn_output.cpu()}
-#         pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/neox_attn_output.{curtime}', 'wb'))
-
-# curtime = time.time_ns()
-#         r = {'ln2hidden': hidden_states.cpu(), 'ln2w': self.ln_2.weight.data.cpu(), 'ln2b': self.ln_2.bias.data.cpu()}
-#         pickle.dump(r, open(f'/nas/lishengping/caiyun_projects/gpt_neox/debug/neox_ln2hidden.{curtime}', 'wb'))
