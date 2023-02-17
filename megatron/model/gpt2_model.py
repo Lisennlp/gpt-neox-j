@@ -1,5 +1,5 @@
-#
-# Copyright 2021 Biderman et al. This file is based on code by the authors denoted below and has been modified from its original version.
+# Copyright (c) 2021 EleutherAI
+# This file is based on code by the authors denoted below and has been modified from its original version.
 #
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -18,7 +18,6 @@
 """GPT-2 model."""
 
 import math
-import os
 import torch
 import torch.nn as nn
 from collections import defaultdict
@@ -28,7 +27,7 @@ from megatron.model.utils import Lambda, SequentialWrapper, recursive_setattr
 from megatron.model.norms import get_norm
 from megatron.model.init_functions import get_init_methods
 
-from megatron import mpu, print_rank_0
+from megatron import mpu
 from megatron.mpu import ParallelRelativePositionBias
 from megatron.model.transformer import (
     ParallelTransformerLayerPipe,
@@ -49,11 +48,8 @@ def gpt2_attention_mask_func(attention_scores, ltor_mask):
     attention_scores.masked_fill_(ltor_mask, -10000.0)
     return attention_scores
 
-import pickle
-count = 0
 
-loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
-def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
+def cross_entropy(output, labels, _fp16=False):
     """From pretrain_gpt2:forward_step()"""
     """
     if self.fp16_lm_cross_entropy:
@@ -63,56 +59,21 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         loss = mpu.vocab_parallel_cross_entropy(output.float(), labels)
         return loss
     """
-    # train和eval都是使用的这个loss函数
-    global count
     labels, loss_mask = labels[0], labels[1]
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
-        # preds: bsz x len, losses: bsz x len
-        losses = loss_fn(output.contiguous(), labels)
-        # losses, preds = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels, loss_mask)
+        losses = mpu.vocab_parallel_cross_entropy(output.contiguous(), labels)
     else:
-        # 走这
-        # print(f'output: {output.shape} labels: {labels.shape}')
-        # preds: bsz x len, losses: bsz x len
-        losses = loss_fn(output.view(-1, output.size(-1)).contiguous(), labels.view(-1))
-        # losses, preds = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels, loss_mask)
-     # 每个token的平均loss
-    if loss_mask is not None:
-        mask_loss = losses.masked_select(loss_mask.bool())
-        # print(f'mask loss : {mask_loss.view(-1)}')
-        # print(f'loss_mask : {loss_mask.view(-1)}')
-    loss = torch.sum(losses.view(-1) * loss_mask.view(-1)) / loss_mask.sum()
-
-    if pred_results_dir is not None:
-        # ===================================================
-        mask_preds = preds.masked_select(loss_mask.bool())
-        mask_labels = labels.masked_select(loss_mask.bool())
-        right = (mask_preds == mask_labels).sum()
-        total = loss_mask.sum()
-        pred_results = dict()
-        pred_results_path = os.path.join(pred_results_dir, str(count))
-        print(f'pred_results_path: {pred_results_path} loss: {loss.item()}')
-        pred_results['loss_mask'] = loss_mask.cpu()
-        pred_results['labels'] = labels.cpu()
-        pred_results['mask_preds'] = mask_preds.cpu()
-        pred_results['mask_labels'] = mask_labels.cpu()
-        pred_results['right'] = right.item()
-        pred_results['total'] = total.item()
-        pred_results['loss'] =  loss.item()
-        pred_results['acc'] =  pred_results['right'] / pred_results['total']
-        pickle.dump(pred_results, open(pred_results_path, 'wb'))
-        count += 1
-        print(f'mask_preds: {mask_preds.tolist()} mask_labels: {mask_labels.tolist()}')
-    # ===================================================
+        losses = mpu.vocab_parallel_cross_entropy(output.float().contiguous(), labels)
+    loss_mask = loss_mask.view(-1)
+    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
     return loss
 
 
 def _pre_transformer_block(args):
     # data format change for hidden_states to avoid explicit tranposes : [b s h] --> [s b h]
     assert len(args) == 2, "Incorrect number of arguments to _pre_transformer_block"
-    # fn = lambda _args: (_args[0].transpose(0, 1).contiguous(), *_args[1:])
-    fn = lambda _args: (_args[0].contiguous(), *_args[1:])
+    fn = lambda _args: (_args[0].transpose(0, 1).contiguous(), *_args[1:])
     return fn(args)
 
 
@@ -120,8 +81,7 @@ def _post_transformer_block(args):
     # from (hidden_states, attention_mask)
     # to (hidden_states.T)
     assert len(args) == 2, "Incorrect number of arguments to _post_transformer_block"
-    # fn = lambda _args: (_args[0].transpose(0, 1).contiguous())
-    fn = lambda _args: (_args[0].contiguous())
+    fn = lambda _args: (_args[0].transpose(0, 1).contiguous())
     return fn(args)
 
 
@@ -162,8 +122,8 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
 
         super().__init__(
             layers=self.specs,
-            loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy, pred_results_dir=neox_args.pred_results_dir),
-            topology=topology,  # 控制stage的id
+            loss_fn=partial(cross_entropy, _fp16=self.neox_args.fp16_lm_cross_entropy),
+            topology=topology,
             activation_checkpoint_interval=self.neox_args.checkpoint_num_layers
             if self.neox_args.checkpoint_activations
             else 0,
@@ -210,7 +170,7 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
 
         # Embedding layer
         # input will be (input_ids, position_ids, attention_mask)
-        self.neox_args.hidden_dropout = self.neox_args.embd_pdrop
+
         if weight_tying:
             self.specs.append(
                 TiedLayerSpec(
@@ -227,8 +187,6 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
                 )
             )
         else:
-            # LayerSpec作用是把第二个及之后的参数传递给第一个参数
-            # 见https://github.com/microsoft/DeepSpeed/blob/b8fb9c3f1a8a8e3e574a7d53e83ce2b72d471aa3/deepspeed/runtime/pipe/module.py#L23 63行
             self.specs.append(
                 LayerSpec(
                     EmbeddingPipe,
@@ -282,14 +240,14 @@ class GPT2ModelPipe(PipelineModule, torch.nn.Module):
                 self.specs.append(
                     LayerSpec(
                         ParallelTransformerLayerPipe,
-                        config=self.neox_args,
-                        # attention_mask_func=gpt2_attention_mask_func,
-                        # init_method=self.init_method,
-                        # output_layer_init_method=self.output_layer_init_method,
-                        # layer_number=i,
-                        # rpe=rpe_emb if self.neox_args.pos_emb == "rpe" else None,
-                        # rotary=self.neox_args.pos_emb == "rotary",
-                        # use_cache=self.use_cache,
+                        neox_args=self.neox_args,
+                        attention_mask_func=gpt2_attention_mask_func,
+                        init_method=self.init_method,
+                        output_layer_init_method=self.output_layer_init_method,
+                        layer_number=i,
+                        rpe=rpe_emb if self.neox_args.pos_emb == "rpe" else None,
+                        rotary=self.neox_args.pos_emb == "rotary",
+                        use_cache=self.use_cache,
                     )
                 )
 

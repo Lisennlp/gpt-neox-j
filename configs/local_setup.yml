@@ -1,6 +1,7 @@
 # Suggested data paths when using GPT-NeoX locally
 {
-  # "data-path": "data/enron/enron_text_document",
+  "data-path": "data/enron/enron_text_document",
+
   # or for weighted datasets:
   # "train-data-paths": ["data/enron/enron_text_document", "data/enron/enron_text_document"],
   # "test-data-paths": ["data/enron/enron_text_document", "data/enron/enron_text_document"],
@@ -17,11 +18,8 @@
   "vocab-file": "data/gpt2-vocab.json",
   "merge-file": "data/gpt2-merges.txt",
 
-  "save": "/nas2/lishengping/gpt2_large_layers/0216",
-  # "load": "/nas2/lishengping/gpt2_large_layers",
-  "load": "/nas2/lishengping/gpt2_large_layers/global_step1",
-  # "load": "/nas/lishengping/caiyun_projects/gpt_neox/checkpoints",
-
+  "save": "checkpoints",
+  "load": "checkpoints",
   "checkpoint_validation_with_forward_pass": False,
 
   "tensorboard-dir": "tensorboard",

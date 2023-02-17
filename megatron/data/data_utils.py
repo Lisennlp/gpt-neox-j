@@ -1,26 +1,29 @@
+# Copyright (c) 2021, EleutherAI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import math
-import os
-from collections import defaultdict
-import pickle
-import random
-
-
+import torch
 import numpy as np
 from typing import List, Tuple
 from itertools import zip_longest
 from functools import partial
-
-import torch
-from torch.utils.data import DataLoader
 
 from megatron import mpu, print_rank_0
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.gpt2_dataset import GPT2Dataset
 from megatron.data.samplers import DistributedBatchSampler
-from itertools import cycle
-
 
 
 def make_data_loader(dataset, neox_args):
@@ -82,6 +85,7 @@ def build_the_dataset(
 
 def build_train_valid_test_datasets(
     data_prefix,
+    use_shared_fs,
     data_impl,
     splits_string,
     train_valid_test_num_samples,
@@ -92,9 +96,8 @@ def build_train_valid_test_datasets(
     """Build train, valid, and test datasets."""
 
     # Indexed dataset.
-    print(f'data_prefix{data_prefix}, data_impl:{data_impl}, skip_warmup:{skip_warmup}')
-    # MMapIndexedDataset对象
     indexed_dataset = make_indexed_dataset(data_prefix, data_impl, skip_warmup)
+
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
 
@@ -129,13 +132,14 @@ def build_train_valid_test_datasets(
                 train_valid_test_num_samples[index],
                 seq_length,
                 seed,
+                use_shared_fs=use_shared_fs
             )
         return dataset
 
     train_dataset = build_dataset(0, "train")
     valid_dataset = build_dataset(1, "valid")
     test_dataset = build_dataset(2, "test")
-    # GPT2Dataset对象
+
     return train_dataset, valid_dataset, test_dataset
 
 
@@ -249,17 +253,20 @@ def weights_by_num_docs(l, alpha=0.3):
     """
     Builds weights from a multinomial distribution over groups of data according to the number of
     samples in each group.
+
     We sample from a group according to the probability p(L) ∝ |L| ** α,
     where p(L) is the probability of sampling from a given group,
           |L| is the number of examples in that datapoint,
           and α is a coefficient that acts to upsample data from underrepresented groups
+
     Hence α (`alpha`) allows us to control how much to 'boost' the probability of training on low-resource groups.
+
     See https://arxiv.org/abs/1911.02116 for more details
     """
     total_n_docs = sum(l)
     unbiased_sample_probs = [i / total_n_docs for i in l]
 
-    probs = [i ** alpha for i in unbiased_sample_probs]
+    probs = [i**alpha for i in unbiased_sample_probs]
 
     # normalize
     total = sum(probs)
@@ -387,9 +394,9 @@ def build_train_valid_test_data_iterators(neox_args):
         else:
             # when just data_path is provided
             # split dataset into train, valid and test from data_path
-            print(f'neox_args.data_path: {neox_args.data_path}')
             train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
                 data_prefix=neox_args.data_path,
+                use_shared_fs=neox_args.use_shared_fs,
                 data_impl=neox_args.data_impl,
                 splits_string=neox_args.split,
                 train_valid_test_num_samples=train_val_test_num_samples,
@@ -483,96 +490,3 @@ def compile_helper():
         import sys
 
         sys.exit(1)
-
-
-def get_batch_data(data_dir, f, batch_size):
-    abs_path = os.path.join(data_dir, f)
-    data = pickle.load(open(abs_path, 'rb'))
-    batch_data = defaultdict(list)
-    for k, v in data.items():
-        for i in range(0, len(v), batch_size):
-            batch_data = {}
-            for key in data:
-                t = np.array(data[key][i: (i + 1) * batch_size])
-                batch_data[key] = torch.from_numpy(t)
-            # print(f'batch_data: {batch_data}')
-            yield batch_data
-
-
-def metaicl_dataloader(neox_args):
-    (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
-    print_rank_0("> building train, validation, and test datasets ...")
-    if neox_args.is_pipe_parallel:
-        is_first_stage = mpu.get_pipe_parallel_rank() == 0
-        is_last_stage = (
-            mpu.get_pipe_parallel_rank() == mpu.get_pipe_parallel_world_size() - 1
-        )
-        pipe_load = is_first_stage or is_last_stage
-    else:
-        pipe_load = True
-
-    if mpu.get_model_parallel_rank() == 0 and pipe_load:
-        batch_size = neox_args.batch_size
-        files = os.listdir(neox_args.data_path)
-        train_file_path = [f for f in files if 'train' in f]
-        dev_file_path = [f for f in files if 'dev' in f]
-        test_file_path = [f for f in files if 'test' in f]
-        print(f'train_file_path: {train_file_path}')
-        print(f'dev_file_path: {dev_file_path}')
-        print(f'test_file_path: {test_file_path}')
-
-        train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
-        valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
-        test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
-
-        random.shuffle(train_dataloader)
-        random.shuffle(valid_dataloader)
-        random.shuffle(test_dataloader)
-    else:
-        pass
-    
-    if mpu.get_model_parallel_rank() == 0 and pipe_load:
-        do_train = train_dataloader is not None and neox_args.train_iters > 0
-        do_valid = valid_dataloader is not None and neox_args.eval_iters > 0
-        do_test = test_dataloader is not None and neox_args.eval_iters > 0
-        # Need to broadcast num_tokens and num_type_tokens.
-        flags = torch.cuda.LongTensor([int(do_train), int(do_valid), int(do_test)])
-    else:
-        flags = torch.cuda.LongTensor([0, 0, 0])
-
-    if neox_args.is_pipe_parallel:
-        torch.distributed.broadcast(flags, src=0)
-    else:
-        torch.distributed.broadcast(
-            flags,
-            mpu.get_model_parallel_src_rank(),
-            group=mpu.get_model_parallel_group(),
-        )
-    neox_args.do_train = flags[0].item()
-    neox_args.do_valid = flags[1].item()
-    neox_args.do_test = flags[2].item()
-
-    # Build iterators.
-    if train_dataloader is not None:
-        train_data_iterator = iter(cycle(train_dataloader))
-    else:
-        train_data_iterator = None
-
-    if valid_dataloader is not None:
-        valid_data_iterator = iter(cycle(valid_dataloader))
-    else:
-        valid_data_iterator = None
-
-    if test_dataloader is not None:
-        test_data_iterator = iter(cycle(test_dataloader))
-    else:
-        test_data_iterator = None
-
-    return train_data_iterator, valid_data_iterator, test_data_iterator
-
-
-    #  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m torch.distributed.launch --nproc_per_node=8 train.py --task class_to_class --k 16384 --test_k 16 --seed 100 --train_seed 1234 --use_demonstrations --method direct --n_gpu 8 --batch_size 1 --fp16 --optimization adamw --out_dir checkpoints/class_to_class_all --init_checkpoint /nas2/lishengping/caiyun_projects/MetaICL/checkpoints/class_to_class/filter2000/model-0.pt --tensorize_dir /nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/icl --lr 0 |tee test.log
-
-    #  CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m torch.distributed.launch --nproc_per_node=8 train.py --task class_to_class --k 16384 --test_k 16 --seed 100 --train_seed 1234 --use_demonstrations --method direct --n_gpu 8 --batch_size 1 --fp16 --optimization adamw --out_dir checkpoints/class_to_class_all --init_checkpoint /nas/lishengping/caiyun_projects/gpt_neox/checkpoints/model-0.pt --tensorize_dir /nas2/lishengping/caiyun_projects/MetaICL/tensorized/small/icl --lr 0 |tee test.log
-
-     

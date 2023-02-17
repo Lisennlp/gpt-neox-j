@@ -1,5 +1,6 @@
-# Copyright (c) 2021  Josh Levy-Kramer <josh@levykramer.co.uk>. All rights reserved.
+# Copyright (c) 2021, EleutherAI
 # This file is based on code by the authors denoted below and has been modified from its original version.
+#
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,7 +72,6 @@ def pad_batch(context_tokens: List[List[int]], pad_id: int, pad_len: int):
         elif context_length > pad_len:
             raise ValueError("context_length is bigger than to be padded length")
         context_lengths.append(context_length)
-    print(f'context_lengths: {context_lengths} pad_id: {pad_id}')
     return context_tokens, context_lengths
 
 
@@ -279,6 +279,9 @@ def stream_tokens(
         # initialize generation variables
         state_is_done = torch.zeros([batch_size]).byte().cuda()
         token_generation_end_index = torch.ones([batch_size]).long().cuda() * (-1)
+        generation_logits = (
+            torch.empty(maximum_tokens, neox_args.padded_vocab_size).float().cuda()
+        )
 
         while token_index_to_generate <= last_token_index_to_generate:
             if recompute:  # recompute all tokens
@@ -334,6 +337,11 @@ def stream_tokens(
                         next_token_log_probs, num_samples=1
                     ).view(-1)
 
+                if neox_args.return_logits:
+                    generation_logits[
+                        token_index_to_generate - 1
+                    ] = generated_token_logits[0]
+
             if neox_args.is_pipe_parallel:
                 # broadcast generated tokens to pipe parallel group
                 src_rank = model.grid.stage_to_global(model.num_stages - 1)
@@ -379,7 +387,7 @@ def stream_tokens(
 
             token_index_to_generate += 1
 
-            yield context_tokens, token_generation_start_index, token_generation_end_index, state_is_done.bool()
+            yield context_tokens, token_generation_start_index, token_generation_end_index, generation_logits, state_is_done.bool()
             if torch.all(state_is_done):
                 break
 
@@ -474,6 +482,7 @@ def generate_samples_from_prompt(
             batch_context_tokens,
             batch_token_generation_start_index,
             batch_token_generation_end_index,
+            batch_generated_token_logits,
             is_done,
         ) in stream_tokens(
             neox_args=neox_args,
@@ -527,6 +536,10 @@ def generate_samples_from_prompt(
                     "message": message,
                     "duration_seconds": float(time.time() - start_time),
                 }
+
+                if neox_args.return_logits:
+                    data["logits"] = batch_generated_token_logits.cpu().numpy().tolist()
+
                 generated_texts.append(data)
 
     return generated_texts
@@ -539,6 +552,7 @@ def generate_samples_input_from_file(
     output_file=None,
     eos_token_id: int = None,
     maximum_tokens: int = 64,
+    prompt_end: str = "\n",
     recompute: bool = False,
     temperature: float = 0.0,
     top_k: int = 0,
@@ -557,6 +571,7 @@ def generate_samples_input_from_file(
 
     eos_token_id: end of text token at which completion is terminated, even if max_tokes count has not been reached
     maximum_tokens: maximum number of tokens to be generated
+    prompt_end: end of a single input prompt. Defaults to newline character '\n'. Other prompt-end sequences may be useful when generating indent-aware completions (e.g. code)
 
     recompute: flag indicating whether a cache is used for already forwarded tokens (true) or whether all tokens are recomputed at every iteration (false)
 
@@ -579,14 +594,11 @@ def generate_samples_input_from_file(
     print_rank_0(
         "generate_samples_input_from_file() loading input from {}".format(input_file)
     )
-    # with open(input_file, "r") as f:
-    #     prompts = f.readlines()
-    # prompts = [p.strip() for p in prompts]
-    # prompts = [p for p in prompts if len(p) > 0]
-    with open(input_file, "r") as f:
-        for line in f:
-            line = json.loads(line)
-    prompts = [line['text']]   
+    with open(input_file, "r", encoding="utf-8") as f:
+        prompts = f.read()
+        prompts = prompts.split(prompt_end)
+    prompts = [p.strip() for p in prompts]
+    prompts = [p for p in prompts if len(p) > 0]
     print_rank_0(
         "generate_samples_input_from_file() prompts loaded: {}".format(len(prompts))
     )
@@ -645,6 +657,7 @@ def generate_samples_unconditional(
 
     eos_token_id: end of text token at which completion is terminated, even if max_tokes count has not been reached
     maximum_tokens: maximum number of tokens to be generated
+    prompt_end: end of a single input prompt. Defaults to newline character '\n'. Other prompt-end sequences may be useful when generating indent-aware completions (e.g. code). The interactive mode will reroll the user-input request until the stop-char is met
 
     recompute: flag indicating whether a cache is used for already forwarded tokens (true) or whether all tokens are recomputed at every iteration (false)
 
@@ -690,6 +703,7 @@ def generate_samples_interactive(
     neox_args,
     model,
     maximum_tokens: int = 64,
+    prompt_end: str = "\n",
     eos_token_id: int = None,
     recompute: bool = False,
     temperature: float = 0.0,
@@ -729,7 +743,20 @@ def generate_samples_interactive(
 
         if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
             os.system("clear")
-            raw_text = input("Context prompt >>> ")
+            raw_text = ""
+            while True:
+                current_input = input("Context prompt >>> ")
+                if (
+                    prompt_end == "\n"
+                ):  # we need to handle '\n' case as 'input' strips it and leads to lines being squashed
+                    raw_text += current_input
+                    break
+                if prompt_end in current_input:
+                    raw_text += current_input.split(prompt_end)[0]
+                    break
+                raw_text += (
+                    current_input + "\n"
+                )  # re-add newline since we stripped it on input
             context_tokens = neox_args.tokenizer.tokenize(raw_text)
             if len(context_tokens) == 0:
                 context_tokens = [neox_args.tokenizer.eod]
@@ -752,6 +779,7 @@ def generate_samples_interactive(
             batch_context_tokens,
             batch_token_generation_start_index,
             batch_token_generation_end_index,
+            batch_generated_token_logits,
             is_done,
         ) in stream_tokens(
             neox_args=neox_args,
@@ -772,7 +800,8 @@ def generate_samples_interactive(
                     .tolist()[
                         batch_token_generation_start_index[0]
                         .item() : batch_token_generation_end_index[0]
-                        .item() + 1
+                        .item()
+                        + 1
                     ]
                 )
                 generated_text = neox_args.tokenizer.detokenize(generated_tokens)

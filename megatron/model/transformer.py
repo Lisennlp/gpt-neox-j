@@ -1,5 +1,5 @@
-#
-# Copyright 2021 Biderman et al. This file is based on code by the authors denoted below and has been modified from its original version.
+# Copyright (c) 2021 EleutherAI
+# This file is based on code by the authors denoted below and has been modified from its original version.
 #
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -40,8 +40,6 @@ from megatron.model.fused_bias_dropout import (
 )
 from megatron.model.utils import configure_sparse_attention
 
-from megatron import print_rank_0, mpu
-
 # flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
@@ -68,17 +66,6 @@ torch._C._jit_override_can_fuse_on_gpu(True)
                masked-attention-scores = attention_mask_func(
                                      unmasked-attention-scores, attention-mask)
 """
-
-
-token_len = 5800000
-def delsp(x, n, length_dim=2):
-    if x is None:
-        print(f'{n} is None')
-        return ''
-    if length_dim == 2:
-        print(f'{n}: {x[0, :token_len]}, sum: {x[0, :token_len].sum()} max: {x[0, :token_len].max()} min: {x[0, :token_len].min()} shape: {x[0].shape}\n')
-    else:
-        print(f'{n}: {x[0, :, :token_len]}, sum: {x[0, :, :token_len].sum()} max: {x[0, :, :token_len].max()} min: {x[0, :, :token_len].min()} shape: {x[0].shape}\n')
 
 
 class ParallelMLP(nn.Module):
@@ -272,7 +259,8 @@ class ParallelSelfAttention(nn.Module):
             self.rotary_emb = None
 
         self.attention_type = neox_args.attention_config[layer_number]
-        self.sparse = self.attention_type != "global"
+        self.use_flash_attention = self.attention_type == "flash"
+        self.sparse = self.attention_type != "global" and not self.use_flash_attention
         if self.sparse:
             self.sparse_attn = configure_sparse_attention(
                 neox_args,
@@ -281,19 +269,31 @@ class ParallelSelfAttention(nn.Module):
                 mpu=mpu,
             )
         else:
-            self.scale_mask_softmax = FusedScaleMaskSoftmax(
-                input_in_fp16=self.fp16,
-                input_in_bf16=self.bf16,
-                fusion_type=get_fusion_type(neox_args),
-                mask_func=self.attention_mask_func,
-                softmax_in_fp32=self.attention_softmax_in_fp32,
-                scale=coeff,
-            )
+            if self.use_flash_attention:
+                from megatron.model.flash_attention import (
+                    flash_attn_unpadded_qkvpacked_func,
+                )
+
+                self.flash_attention_function = flash_attn_unpadded_qkvpacked_func
+                if self.pos_emb == "alibi":
+                    raise ValueError(
+                        "Flash attention is currently not compatible with AliBi positional embeddings. Use sinuisoidal, learned, or rotary embeddings instead."
+                    )
+            else:
+                self.scale_mask_softmax = FusedScaleMaskSoftmax(
+                    input_in_fp16=self.fp16,
+                    input_in_bf16=self.bf16,
+                    fusion_type=get_fusion_type(neox_args),
+                    mask_func=self.attention_mask_func,
+                    softmax_in_fp32=self.attention_softmax_in_fp32,
+                    scale=coeff,
+                )
 
             # Dropout. Note that for a single iteration, this layer will generate
             # different outputs on different number of parallel partitions but
             # on average it should not be partition dependent.
-            self.attention_dropout = nn.Dropout(neox_args.attention_dropout)
+            self.dropout_p = neox_args.attention_dropout
+            self.attention_dropout = nn.Dropout(self.dropout_p)
 
         # Output.
         self.dense = mpu.RowParallelLinear(
@@ -409,6 +409,55 @@ class ParallelSelfAttention(nn.Module):
         context_layer = context_layer.view(*output_size)
         return context_layer
 
+    def flash_attention(self, query_layer, key_layer, value_layer):
+        # [b, np, sq, sk]
+        output_size = (
+            query_layer.size(1),
+            query_layer.size(2),
+            query_layer.size(0),
+            key_layer.size(0),
+        )
+        # [s, b, np, hn] -> [b, s, np, hn] -> [b * s, 1, np, hn]
+        query_layer = query_layer.transpose(0, 1).reshape(
+            output_size[0] * output_size[2], 1, output_size[1], -1
+        )
+        key_layer = key_layer.transpose(0, 1).reshape(
+            output_size[0] * output_size[3], 1, output_size[1], -1
+        )
+        value_layer = value_layer.transpose(0, 1).reshape(
+            output_size[0] * output_size[3], 1, output_size[1], -1
+        )
+
+        # Combined q/k/v into [b * s, 3, np, hn].
+        qkv = torch.concat([query_layer, key_layer, value_layer], dim=1)
+
+        batch_size = output_size[0]
+        seqlen = output_size[2]
+        max_s = seqlen
+        cu_seqlens = torch.arange(
+            0,
+            (batch_size + 1) * seqlen,
+            step=seqlen,
+            dtype=torch.int32,
+            device=qkv.device,
+        )
+        output = self.flash_attention_function(
+            qkv,
+            cu_seqlens,
+            max_s,
+            self.dropout_p if self.training else 0.0,
+            softmax_scale=None,
+            causal=True,
+        )
+        # [b * sq, np, hn] -> [b, sq, np, hn]
+        matmul_result = output.view(
+            output_size[0], output_size[2], output.shape[1], output.shape[2]
+        )
+        # [b, sq, np, hn] -> [b, np, sq, hn]
+        matmul_result = matmul_result.transpose(1, 2)
+
+        return matmul_result
+
     def sparse_attention(self, query_layer, key_layer, value_layer, attention_mask):
         # TODO: sparse attn dropout?
         # TODO: pad to block size
@@ -481,6 +530,7 @@ class ParallelSelfAttention(nn.Module):
             if exists(self.rotary_ndims):
                 query_layer = torch.cat((query_layer, query_pass), dim=-1)
                 key_layer = torch.cat((key_layer, key_pass), dim=-1)
+
         # ==================================
         # Cache key and value for inference
         # ==================================
@@ -495,7 +545,9 @@ class ParallelSelfAttention(nn.Module):
         if self.use_cache:
             present = torch.stack((key_layer, value_layer))
 
-        if not self.sparse:
+        if self.use_flash_attention:
+            context_layer = self.flash_attention(query_layer, key_layer, value_layer)
+        elif not self.sparse:
             context_layer = self.attention(
                 query_layer, key_layer, value_layer, layer_past, attention_mask
             )
@@ -556,6 +608,7 @@ class ParallelTransformerLayer(nn.Module):
         self.hidden_dropout = neox_args.hidden_dropout
         self.bias_dropout_fusion = neox_args.bias_dropout_fusion
         self.gpt_j_residual = neox_args.gpt_j_residual
+        self.gpt_j_tied = neox_args.gpt_j_tied
 
         if self.gpt_j_residual:
             self.reduce = mpu.mappings.reduce_from_model_parallel_region
@@ -574,6 +627,8 @@ class ParallelTransformerLayer(nn.Module):
         )
 
         # Layernorm on the output of the attention layer.
+        # If GPT-J residuals are used, this is surpurfulous but leaving it in
+        # leads to cleaner code
         self.post_attention_layernorm = norm(neox_args.hidden_size, eps=eps)
 
         # MLP
@@ -603,14 +658,23 @@ class ParallelTransformerLayer(nn.Module):
         # x: [b, s, h]
         if self.gpt_j_residual:
             # pseudocode:
-            # x = x + attn(ln1(x)) + mlp(ln2(x))
+            # x = x + attn(ln(x)) + mlp(ln(x))
             # this means we can avoid doing the allreduce in the attn / mlp outputs
             # to save communication time (we can do a single allreduce after we add mlp / attn outputs).
+            # due to a bug, the two layernorms are not tied in GPT-NeoX-20B. This is non-desirable, but
+            # we preserve the functionality for backwards compatibility
 
-            # attention_output = attn(ln1(x))
             residual = x
+            # applies the correct normalization depending on if the norms are tied
+            if self.gpt_j_tied:
+                x = self.input_layernorm(x)
+                x1, x2 = x, x
+            else:
+                x1, x2 = self.input_layernorm(x), self.post_attention_layernorm(x)
+
+            # attention operator
             attention_output, attention_bias = self.attention(
-                self.input_layernorm(x), attention_mask, layer_past=layer_past
+                x1, attention_mask, layer_past=layer_past
             )
             if self.use_cache:
                 attention_output, presents = attention_output
@@ -624,8 +688,8 @@ class ParallelTransformerLayer(nn.Module):
                     prob=self.hidden_dropout,
                 )
 
-            # output = mlp(ln2(x)) + attention_output
-            mlp_output, mlp_bias = self.mlp(self.post_attention_layernorm(x))
+            # mlp operator
+            mlp_output, mlp_bias = self.mlp(x2)
             with torch.enable_grad():
                 output = bias_dropout_fn(
                     mlp_output,
@@ -634,7 +698,7 @@ class ParallelTransformerLayer(nn.Module):
                     prob=self.hidden_dropout,
                 )
 
-            # output = output + residual
+            # output = (x + attn(ln(x)) + mlp(ln(x))
             output = residual + self.reduce(output)
         else:
             # pseudocode:
@@ -673,36 +737,16 @@ class ParallelTransformerLayer(nn.Module):
         return output
 
 
-# class ParallelTransformerLayerPipe(ParallelTransformerLayer):
-#     """Extends ParallelTransformerLayer to forward attention_mask through the pipeline."""
+class ParallelTransformerLayerPipe(ParallelTransformerLayer):
+    """Extends ParallelTransformerLayer to forward attention_mask through the pipeline."""
 
-#     def forward(self, args):
-#         assert (
-#             len(args) == 2
-#         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
-#         hidden_states, attention_mask = args
-#         # we are returning just [hidden_states, mask]
-#         return super().forward(hidden_states, attention_mask), attention_mask
-
-# from transformers.models.gpt2_model import GPT2Block
-from transformers.models.gpt2.modeling_gpt2 import GPT2Block 
-
-# print(f'attnout: {attn_output} sum: {attn_output.sum()} shape: {attn_output.shape}')
-class ParallelTransformerLayerPipe(GPT2Block):
     def forward(self, args):
         assert (
             len(args) == 2
         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
         hidden_states, attention_mask = args
-        # print_rank_0(f'hidden_states0000: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=0)
-        # print_rank_0(f'hidden_states1111: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=1)
-        # print_rank_0(f'hidden_states2222: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=2)
-        # print_rank_0(f'hidden_states3333: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=3)
-        # print_rank_0(f'hidden_states4444: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=4)
-        # print_rank_0(f'hidden_states5555: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=5)
-        # print_rank_0(f'hidden_states6666: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=6)
-        # print_rank_0(f'hidden_states7777: {hidden_states} sum: {hidden_states.sum().item()} mean: {hidden_states.mean()} max: {hidden_states.max()} min: {hidden_states.min()}', rank=7)
-        return super().forward(hidden_states, attention_mask=None)[0], attention_mask # lsp
+        # we are returning just [hidden_states, mask]
+        return super().forward(hidden_states, attention_mask), attention_mask
 
 
 class ParallelLinearPipe(ParallelLinear):
@@ -728,22 +772,22 @@ class NormPipe(nn.Module):
         assert not isinstance(
             args, tuple
         ), "NormPipe should only receive a single tensor as input"
-        norm_r = self.norm(args)
-        return norm_r
-
+        return self.norm(args)
 
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output, bias=None):
     """LM logits using word embedding weights."""
     # Parallel logits.
-    import pickle
     input_parallel = mpu.copy_to_model_parallel_region(input_)
+
     # Matrix multiply.
     if bias is None:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight)
     else:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight, bias)
+
     # Gather if needed.
     if parallel_output:
         return logits_parallel
+
     return mpu.gather_from_model_parallel_region(logits_parallel)

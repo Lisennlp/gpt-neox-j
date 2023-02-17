@@ -1,3 +1,6 @@
+# Copyright (c) 2021, EleutherAI
+# This file is based on code by the authors denoted below and has been modified from its original version.
+#
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +23,7 @@ import os
 import sys
 
 import lm_dataformat as lmd
+import numpy as np
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir))
@@ -89,6 +93,7 @@ def get_args():
             "HFTokenizer",
             "GPT2BPETokenizer",
             "CharLevelTokenizer",
+            "TiktokenTokenizer",
         ],
         help="What type of tokenizer to use.",
     )
@@ -214,7 +219,7 @@ def main():
         # add each tokenized document / sentence
         for key, sentences in doc.items():
             for sentence in sentences:
-                builders[key].add_item(torch.IntTensor(sentence))
+                builders[key].add_item(np.array(sentence, dtype=builders[key].dtype))
             # separate with eos token
             builders[key].end_document()
 

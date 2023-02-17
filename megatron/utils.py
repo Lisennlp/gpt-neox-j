@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Josh Levy-Kramer <josh@levykramer.co.uk>.
+# Copyright (c) 2021, EleutherAI
 # This file is based on code by the authors denoted below and has been modified from its original version.
 #
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
@@ -39,11 +39,9 @@ from collections import deque
 
 def reduce_losses(losses):
     """Reduce a tensor of losses across all GPUs."""
-    reduced_losses = torch.cat([loss.clone().detach().view(1).float() for loss in losses])
-    # print(f'reduced_losses000: {reduced_losses}')
+    reduced_losses = torch.cat([loss.clone().detach().view(1) for loss in losses])
     torch.distributed.all_reduce(reduced_losses)
     reduced_losses = reduced_losses / torch.distributed.get_world_size()
-    # print(f'reduced_losses111: {reduced_losses}')
     return reduced_losses
 
 
@@ -74,20 +72,6 @@ def get_attn_mask(seq_length, device):
     # convert to binary
     return mask < 0.5
 
-# @lsp
-def get_ltor_masks_and_position_ids_(
-    data,
-    eod_token,
-    eod_mask_loss=False,
-):
-    """Build masks and position id for left to right model."""
-    # Extract batch size and sequence length.
-    batch_size, seq_length = data.size()
-    position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
-    position_ids = position_ids.unsqueeze(0).expand_as(data)
-    # @lsp
-    return position_ids
-    
 
 def get_ltor_masks_and_position_ids(
     data,
@@ -120,6 +104,10 @@ def get_ltor_masks_and_position_ids(
 def local_rank():
     """Local rank of process"""
     local_rank = os.environ.get("LOCAL_RANK")
+
+    if local_rank is None:
+        local_rank = os.environ.get("SLURM_LOCALID")
+
     if local_rank is None:
         print(
             "utils.local_rank() environment variable LOCAL_RANK not set, defaulting to 0",
@@ -442,9 +430,11 @@ def setup_for_inference_or_eval(
     if neox_args.load is None:
         raise ValueError("`load` parameter must be supplied to load a model`")
 
+    # initialize wandb
+    init_wandb(neox_args=neox_args)
+
     # initialize megatron
     initialize_megatron(neox_args)
-    neox_args.pred_results_dir = None
 
     # set up model and load checkpoint.
     model, _, _ = setup_model_and_optimizer(

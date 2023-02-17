@@ -1,3 +1,17 @@
+# Copyright (c) 2021, EleutherAI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import yaml
 import json
@@ -36,6 +50,7 @@ from .neox_args import (
 
 # ZERO defaults by deespeed
 # These values should not be changed unless defaults in deepspeed are changed
+# for all zero_optimization options, see https://www.deepspeed.ai/docs/config-json/#zero-optimizations-for-fp16-training
 ZERO_DEFAULTS = {
     "stage": 0,
     "allgather_partitions": True,
@@ -45,7 +60,6 @@ ZERO_DEFAULTS = {
     "reduce_scatter": True,
     "reduce_bucket_size": int(5e8),
     "contiguous_gradients": False,
-    "cpu_offload": False,
 }
 
 # NeoX optimizer defaults
@@ -288,10 +302,9 @@ class NeoXArgs(*BASE_CLASSES):
             "-H",
             "--hostfile",
             type=str,
-            default=DLTS_HOSTFILE,
             help="Hostfile path (in MPI style) that defines the "
-                 "resource pool available to the job (e.g., "
-                 "worker-0 slots=4)"
+            "resource pool available to the job (e.g., "
+            "worker-0 slots=4)",
         )
         group = parser.add_argument_group(title="Generation args")
         group.add_argument(
@@ -392,6 +405,20 @@ class NeoXArgs(*BASE_CLASSES):
                 args_list.extend(
                     self.convert_key_value_to_command_line_arg(key, configured_value)
                 )
+
+        if "DLTS_HOSTFILE" in os.environ:
+            args_list.extend(
+                self.convert_key_value_to_command_line_arg(
+                    "hostfile", os.environ["DLTS_HOSTFILE"]
+                )
+            )
+
+        if "MASTER_ADDR" in os.environ:
+            args_list.extend(
+                self.convert_key_value_to_command_line_arg(
+                    "master_addr", os.environ["MASTER_ADDR"]
+                )
+            )
 
         if (
             "--include" in args_list or "--exclude" in args_list
@@ -541,6 +568,11 @@ class NeoXArgs(*BASE_CLASSES):
             from deepspeed.utils.distributed import mpi_discovery
 
             mpi_discovery()
+
+        if self.deepspeed_slurm:
+            os.environ["LOCAL_RANK"] = os.environ["SLURM_LOCALID"]
+            os.environ["RANK"] = os.environ["SLURM_PROCID"]
+            os.environ["WORLD_SIZE"] = os.environ["SLURM_NTASKS"]
 
         self.update_value("local_rank", int(os.getenv("LOCAL_RANK", "0")))
         self.update_value("rank", int(os.getenv("RANK", "0")))
@@ -700,6 +732,30 @@ class NeoXArgs(*BASE_CLASSES):
                 # duplicate items
                 "gas": self.gradient_accumulation_steps,
                 "clip_grad": self.gradient_clipping,
+            }
+        )
+
+        # derive steps where checkpoint should be saved
+        if self.checkpoint_factor or self.extra_save_iters:
+            if self.extra_save_iters:
+                save_iters = set(self.extra_save_iters)
+            else:
+                save_iters = set()
+
+            step = self.checkpoint_factor  # don't save step 0 or 1
+            while step < self.train_iters:
+                save_iters.add(step)
+                if self.checkpoint_scale == "log":
+                    step *= self.checkpoint_factor
+                elif self.checkpoint_scale == "linear":
+                    step += self.checkpoint_factor
+
+            save_iters = list(save_iters)
+            save_iters.sort()
+
+        self.update_values(
+            {
+                "save_iters": save_iters,
             }
         )
 
@@ -891,10 +947,14 @@ class NeoXArgs(*BASE_CLASSES):
             raise ValueError(error_message)
             return False
 
-        if self.save is not None and self.save_interval is None:
+        if (
+            self.save is not None
+            and self.checkpoint_factor is None
+            and self.extra_save_iters is None
+        ):
             error_message = (
                 self.__class__.__name__
-                + ".validate_values() save_interval must be defined if save is defined"
+                + ".validate_values() checkpoint_factor or extra_save_iters must be defined if save is defined"
             )
             logging.error(error_message)
             raise ValueError(error_message)

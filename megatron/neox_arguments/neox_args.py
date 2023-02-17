@@ -1,3 +1,16 @@
+# Copyright (c) 2021, EleutherAI
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import subprocess
 from dataclasses import dataclass
@@ -21,6 +34,7 @@ ATTENTION_TYPE_CHOICES = [
     "bslongformer",
     "gmlp",
     "amlp",
+    "flash",
 ]
 
 
@@ -57,7 +71,7 @@ class NeoXArgsParallelism(NeoXArgsTemplate):
     "type:[regex]", which balances layers whose class names match [regex]
     """
 
-    world_size: int = 8    # gxh
+    world_size: int = None
     """
     Total world size (i.e number of gpus in cluster). Configured post-launch using distributed launcher
     """
@@ -71,34 +85,10 @@ class NeoXArgsParallelism(NeoXArgsTemplate):
 
 @dataclass
 class NeoXArgsModel(NeoXArgsTemplate):
-    ##### gptj_args, gxh #####
-    n_inner: int = None 
-    """
-    MLP hidden size, default = 4 * hidden_size
-    """
-    n_embd: int = None    
-    """
-    hidden size
-    """
-    layer_norm_epsilon: float = None 
-    attn_pdrop: float= None
-    resid_pdrop: float = None
-    rotary_dim: int = None
-    activation_function: str=None
-    scaled_upper_triang_masked_softmax_fusion: bool=None
-    # gpt2 @lsp
-    n_ctx: int = None    
-    scale_attn_weights: bool = True
-    is_cross_attention: bool = False
-    scale_attn_by_inverse_layer_idx: bool = False
-    reorder_and_upcast_attn: bool = False
-    add_cross_attention: bool = False
-    #############################
-
-
     """
     Model Arguments
     """
+
     precision: Literal["fp16", "fp32", "bfloat16"] = None
     """
     description of the used precision, either one of fp16 or fp32 (and in the future bf16).
@@ -108,7 +98,7 @@ class NeoXArgsModel(NeoXArgsTemplate):
     """
     Number of transformer layers.
     """
-    
+
     hidden_size: int = None
     """
     Transformer hidden size.
@@ -180,13 +170,18 @@ class NeoXArgsModel(NeoXArgsTemplate):
 
     """
     Attention configuration for gpt-neox
+
     The first item in the list specifies the attention type(s), and should be a list of strings. The second item
     specifies the number of times to repeat those attention types in the full list.
+
     attention type choices:  [global, local, sparse_fixed, sparse_variable, bslongformer, bigbird]
+
     So a 12 layer network with only global attention could be specified like:
         [[[`global`], 12]]
+
     or a 12 layer network with alternating global / local like:
         [[[`global`, `local`], 6]]
+
     If none is specified, this defaults to
         [[[`global`], n_layers]]
     """
@@ -195,10 +190,13 @@ class NeoXArgsModel(NeoXArgsTemplate):
 
     """
     Sparsity configuration dict as defined in https://www.deepspeed.ai/docs/config-json/#sparse-attention
+
     Note that since neox is autoregressive, attention is always "unidirectional" and `horizontal_global_attention` is
     always false.
+
     The main difference between our sparsity config and deepspeed's is that `mode` is ignored - since it is instead
     specified in attention_config defining each layer.
+
     An example config is given below:
           "sparse_attention": {
             "block": 16,
@@ -333,6 +331,15 @@ class NeoXArgsModel(NeoXArgsTemplate):
     Otherwise, we use the residual path from GPT-J, which offers a slight speedup:
       x = ln(x)
       x = x + attn(x) + mlp(x)
+    """
+
+    gpt_j_tied: bool = False
+    """
+    If false, we use
+      x = x + attn(ln1(x)) + mlp(ln2(x))
+    Otherwise, we tie the layer norms
+      y = ln(x)
+      x = x + attn(y) + mlp(y)
     """
 
     soft_prompt_tuning: dict = None
@@ -529,9 +536,6 @@ class NeoXArgsOther(NeoXArgsTemplate):
     """
     Misc. Arguments
     """
-    embd_pdrop: float = 0.1
-    only_eval: bool = False
-    icl_or_neo: str = "icl"
 
     distributed_backend: str = "nccl"
     """
@@ -601,6 +605,11 @@ class NeoXArgsOther(NeoXArgsTemplate):
     Run via MPI, this will attempt to discover the necessary variables to initialize torch distributed from the MPI environment
     """
 
+    deepspeed_slurm: bool = False
+    """
+    Run via SLURM, this will attempt to discover the necessary variables to initialize torch distributed from the SLURM environment
+    """
+
     user_script: str = None
     """
     user script to be run
@@ -626,6 +635,11 @@ class NeoXArgsOther(NeoXArgsTemplate):
     Set during training
     """
 
+    save_iters: list = None
+    """
+    Set during training
+    """
+
     global_num_gpus: int = None
     """
     Set during launching
@@ -644,9 +658,10 @@ class NeoXArgsTokenizer(NeoXArgsTemplate):
         "HFGPT2Tokenizer",
         "SPMTokenizer",
         "CharLevelTokenizer",
+        "TiktokenTokenizer",
     ] = "GPT2BPETokenizer"
     """
-    Type of tokenizer to use - should be one of ["GPT2BPETokenizer", "HFTokenizer", "HFGPT2Tokenizer", "SPMTokenizer", "CharLevelTokenizer"]
+    Type of tokenizer to use - should be one of ["GPT2BPETokenizer", "HFTokenizer", "HFGPT2Tokenizer", "SPMTokenizer", "CharLevelTokenizer", "TiktokenTokenizer"]
     """
 
     padded_vocab_size: int = None
@@ -668,11 +683,14 @@ class NeoXArgsTraining(NeoXArgsTemplate):
     """
 
     data_path: str = None
-    train_data_path: str = None
-    valid_data_path: str = None
-    test_data_path: str = None
     """
     Path to combined dataset to split.
+    """
+
+    use_shared_fs: bool = True
+    """
+    Whether to use a shared filesystem for data loading. If False, local rank 0 on all nodes will preprocess the data,
+    otherwise only global rank 0 will preprocess the data. This is implemented in megatron/data/gpt2_dataset.py::_build_index_mappings.
     """
 
     train_data_paths: list = None
@@ -712,18 +730,23 @@ class NeoXArgsTraining(NeoXArgsTemplate):
     """
     If True, Builds dataset weights from a multinomial distribution over groups of data according to the number of
     documents in each group.
+
     WARNING: setting this to True will override any user provided weights
+
     We sample from a group according to the probability p(L) ∝ |L| ** α,
     where p(L) is the probability of sampling from a given group,
           |L| is the number of examples in that datapoint,
           and α is a coefficient that acts to upsample data from underrepresented groups
+
     Hence α (`alpha`) allows us to control how much to 'boost' the probability of training on low-resource groups.
+
     See https://arxiv.org/abs/1911.02116 for more details
     """
 
     weighted_sampler_alpha: float = 0.3
     """
     Alpha value for `weight_by_num_documents`. Only has an effect if `weight_by_num_documents` = True.
+
     when alpha = 1, the probability of sampling from a given group = n_samples / total_samples
     as alpha -> 0, the probability of sampling from all groups becomes equal, and number of documents has no effect
     as alpha -> inf, the probability of sampling from the groups with *the most samples* -> 1
@@ -759,9 +782,29 @@ class NeoXArgsTraining(NeoXArgsTemplate):
     save input and output of a forward pass with the checkpoint and validate after load
     """
 
-    save_interval: int = None
+    checkpoint_scale: Literal["linear", "log"] = "linear"
     """
-    Number of iterations between checkpoint saves.
+    How step at which checkpoints are saved should scale. "linear" implies 1 checkpoint will be saved at every multiple of `checkpoint-factor`,
+    while "log" implies that the number of steps between each checkpoint will be multiplied by `checkpoint-factor` at each step, starting from step 1.
+    """
+
+    checkpoint_factor: int = None
+    """
+    Acts as a multiplier on either the "log" or "linear" checkpoint spacing.
+
+    With `checkpoint-scale="linear"`, `checkpoint-factor=20`, and `train-iters=100`, checkpoints will be saved at
+    steps [20, 40, 60, 80, 100].
+
+    With `checkpoint-scale="log"`, `checkpoint-factor=2`, and `train-iters=100`, checkpoints will be saved at
+    steps [1, 2, 4, 8, 16, 32, 64, 100].
+
+    Note that the last checkpoint step is always saved.
+    """
+
+    extra_save_iters: list = None
+    """
+    Additional iterations when a checkpoint should be saved.
+    Must be a list of ints or `None`.
     """
 
     no_save_optim: bool = False
@@ -962,9 +1005,19 @@ class NeoXArgsTextgen(NeoXArgsTemplate):
     integer between 0 and the models vocab size. Filters out any logits with a probability less than that of the top_kth token.
     """
 
+    return_logits: bool = False
+    """
+    Boolean for whether to return the logits for generated tokens
+    """
+
     maximum_tokens: int = 64
     """
     maximum number of tokens to be generated
+    """
+
+    prompt_end: str = "\n"
+    """
+    a single prompt's end. Defaults to newline
     """
 
     sample_input_file: str = None
