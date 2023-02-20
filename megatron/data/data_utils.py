@@ -497,7 +497,7 @@ def get_batch_data(data_dir, f, batch_size):
 
 
 def metaicl_dataloader(neox_args):
-    (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
+    (train_dataloader, valid_dataloader, test1_dataloader, test2_dataloader) = (None, None, None, None)
     print_rank_0("> building train, validation, and test datasets ...")
     if neox_args.is_pipe_parallel:
         is_first_stage = mpu.get_pipe_parallel_rank() == 0
@@ -515,19 +515,23 @@ def metaicl_dataloader(neox_args):
             train_file_path = []
         else:
             train_file_path = [f for f in files if 'train' in f]
-        test_file_path = [f for f in files if 'test' in f]
+        test1_file_path = [f for f in files if 'test1' in f]
+        test2_file_path = [f for f in files if 'test2' in f]
         dev_file_path = [f for f in files if 'dev' in f]
-        print(f'dev_file_path: {dev_file_path} test_file_path: {test_file_path} train_file_path: {train_file_path}')
+
+        print(f'train_file_path: {train_file_path} || dev_file_path: {dev_file_path} || test1_file_path: {test1_file_path} || test2_file_path: {test2_file_path}')
         train_dataloader = [d for f in train_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
         valid_dataloader = [d for f in dev_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
-        test_dataloader = [d for f in test_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+        test1_dataloader = [d for f in test1_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+        test2_dataloader = [d for f in test2_file_path for d in get_batch_data(neox_args.data_path, f, batch_size)]
+
     else:
         pass
     
     if mpu.get_model_parallel_rank() == 0 and pipe_load:
         do_train = train_dataloader is not None and neox_args.train_iters > 0
         do_valid = valid_dataloader is not None and neox_args.eval_iters > 0
-        do_test = test_dataloader is not None and neox_args.eval_iters > 0
+        do_test = test1_dataloader is not None and neox_args.eval_iters > 0
         # Need to broadcast num_tokens and num_type_tokens.
         flags = torch.cuda.LongTensor([int(do_train), int(do_valid), int(do_test)])
     else:
@@ -556,9 +560,13 @@ def metaicl_dataloader(neox_args):
     else:
         valid_data_iterator = None
 
-    if test_dataloader is not None:
-        test_data_iterator = iter(cycle(test_dataloader))
+    if test1_dataloader is not None:
+        test1_data_iterator = iter(cycle(test1_dataloader))
     else:
-        test_data_iterator = None
+        test1_data_iterator = None
+    if test2_dataloader is not None:
+        test2_data_iterator = iter(cycle(test2_dataloader))
+    else:
+        test2_data_iterator = None
 
-    return train_data_iterator, valid_data_iterator, test_data_iterator
+    return train_data_iterator, valid_data_iterator, (test1_data_iterator, test2_data_iterator)

@@ -723,10 +723,6 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
         ), "ParallelTransformerLayerPipe expects 2 arguments - hidden_states and attention_mask"
         hidden_states, attention_mask = args
         # we are returning just [hidden_states, mask]
-        # print(f'hidden_states shape: {hidden_states.shape} sum: {hidden_states.sum()}')
-        # x = {'hidden_states': hidden_states.cpu(), 'attention_mask': attention_mask.cpu()}
-        # pickle.dump(x, open(f'temp2/{hidden_states.sum().item()}_{hidden_states[0].sum().item()}.pkl', 'wb'))
-        # print(f'hidden_states min: {hidden_states.min()} max: {hidden_states.max()}')
         return super().forward(hidden_states, attention_mask), attention_mask
 
 

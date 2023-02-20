@@ -55,6 +55,7 @@
    "scaled-upper-triang-masked-softmax-fusion": false,
    "bias-gelu-fusion": false,
 
+   "min_lr": 0.0000001,
 
    # optimizer settings
    "optimizer": {
@@ -89,7 +90,7 @@
 
    # regularization
    "gradient_clipping": 1.0,
-   "weight-decay": 0.1,
+   "weight-decay": 0,
    "hidden-dropout": 0,
    "attention-dropout": 0,
 
@@ -113,7 +114,7 @@
    "distributed-backend": "nccl",
    "lr-decay-style": "linear",
    "warmup": 0.0,
-   "save-interval": 5000,
+   "save-interval": 2500,
    "eval-interval": 500,
    "eval-iters": 50,
 

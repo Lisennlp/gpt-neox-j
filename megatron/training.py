@@ -141,41 +141,41 @@ def pretrain(neox_args):
             test_data_iterator=test_data_iterator,
         )
 
-    if neox_args.do_valid:
-        prefix = "the end of training for val data"
-        evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=valid_data_iterator,
-            model=model,
-            iteration=iteration,
-            verbose=False,
-            timers=timers,
-        )
+    # if neox_args.do_valid:
+    #     prefix = "the end of training for val data"
+    #     evaluate_and_print_results(
+    #         neox_args=neox_args,
+    #         prefix=prefix,
+    #         forward_step_func=forward_step,
+    #         data_iterator=valid_data_iterator,
+    #         model=model,
+    #         iteration=iteration,
+    #         verbose=False,
+    #         timers=timers,
+    #     )
 
-    if neox_args.save and iteration != 0:
-        save_checkpoint(
-            neox_args=neox_args,
-            iteration=iteration,
-            model=model,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-        )
+    # if neox_args.save and iteration != 0:
+    #     save_checkpoint(
+    #         neox_args=neox_args,
+    #         iteration=iteration,
+    #         model=model,
+    #         optimizer=optimizer,
+    #         lr_scheduler=lr_scheduler,
+    #     )
 
-    if neox_args.do_test:
-        # Run on test data.
-        prefix = "the end of training for test data"
-        evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=test_data_iterator,
-            model=model,
-            iteration=0,  # iteration 0 in order to always use full test data
-            verbose=True,
-            timers=timers,
-        )
+    # if neox_args.do_test:
+    #     # Run on test data.
+    #     prefix = "the end of training for test data"
+    #     evaluate_and_print_results(
+    #         neox_args=neox_args,
+    #         prefix=prefix,
+    #         forward_step_func=forward_step,
+    #         data_iterator=test_data_iterator[0],
+    #         model=model,
+    #         iteration=0,  # iteration 0 in order to always use full test data
+    #         verbose=True,
+    #         timers=timers,
+    #     )
 
 
 def _get_batch(neox_args, tokenizer, keys, data, datatype):
@@ -264,12 +264,6 @@ def get_batch_pipe(data, neox_args):
         tokens, labels, loss_mask, attention_mask, position_ids = _get_batch(
             neox_args, neox_args.tokenizer, keys, data, datatype
         )
-    # unpack data
-    # count += 1
-    # x = {'tokens': tokens, 'position_ids': position_ids,'attention_mask': attention_mask, 'labels': labels, 'loss_mask': loss_mask}
-    # x = {k: v.cpu() for k, v in x.items()}
-    # file_path = f'/nas/lishengping/caiyun_projects/gpt_neox/neo_dev/input_{count}.pkl'
-    # pickle.dump(x, open(file_path, 'wb'))
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
@@ -278,10 +272,6 @@ def forward_step(data_iterator, model, neox_args, timers, return_logits=False):
     if neox_args.is_pipe_parallel:
         # return_logits = True
         loss = model.eval_batch(data_iterator, return_logits=return_logits)
-        #     print(f'loss: {loss.item()} logits: {logits.shape}')
-        #     file_path = f'/nas/lishengping/caiyun_projects/gpt_neox/neo_dev/logits_{count}.pkl'
-        #     # x = {'loss': {loss.cpu().item()}, 'logits': logits.cpu()}
-        #     pickle.dump(x, open(file_path, 'wb'))
         return loss
 
     # Get the batch.
@@ -335,13 +325,6 @@ def get_model(neox_args, use_cache=False):
         for name, param in model.named_parameters():
             if not "soft_embedding" in name:
                 param.requires_grad = False
-
-    # for name, param in model.named_parameters():
-    #     if 'mlp' not in name:
-    #         param.requires_grad = False
-    #         print(f'not require grad: {name} param: {param.shape}')
-    #     else:
-    #         print(f'require grad: {name} param: {param.shape}')
 
     if not neox_args.is_pipe_parallel:
         # Export PipeParallel model to nn.Sequential model to avoid the overhead of deepspeed's pipe parallel training
@@ -523,7 +506,6 @@ def setup_model_and_optimizer(neox_args, use_cache=False, iteration=None):
         raise ValueError("Must be using deepspeed to run neox")
 
     # if torch.distributed.get_rank() == 0:
-    #     print_rank_0('-----------@@@@@')
     #     model.save_checkpoint('checkpoints', tag='global_step0', client_state={})
        
     #     print(f'save model finished=========')
@@ -669,28 +651,22 @@ def train(
 
     prefix = "iteration {}".format(iteration)
     # 起始评测
-    neox_args.eval_iters = 152
-    evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=valid_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
-    neox_args.eval_iters = 272
-    evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=test_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
+    valid_iters = [152, 163, 112] #  dev:   bench: 1298, meta: 891
+    valid_data_loaders = [valid_data_iterator, *test_data_iterator]
+    valid_types = ['meta_seen_dev', 'big_bench_test1', 'meta_unseen_test2']
+    for i in range(3):
+        neox_args.eval_iters = valid_iters[i]
+        evaluate_and_print_results(
+                    neox_args=neox_args,
+                    prefix=prefix,
+                    forward_step_func=forward_step,
+                    data_iterator=valid_data_loaders[i],
+                    model=model,
+                    iteration=iteration,
+                    verbose=False,
+                    timers=timers,
+                    valid_type=valid_types[i]
+                )
     if neox_args.only_eval:
         exit(0)
     while iteration < neox_args.train_iters:
@@ -743,6 +719,18 @@ def train(
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
             )
+            last_model_save_path = os.path.join(neox_args.save, f'global_step{iteration - 5000}')
+            if torch.distributed.get_rank() == 0:
+                if os.path.exists(last_model_save_path):
+                    last_model_files = os.listdir(last_model_save_path)
+                    for last_model_file in last_model_files:
+                        if 'zero' in last_model_file:
+                            abs_path = os.path.join(last_model_save_path, last_model_file)
+                            if os.path.exists(abs_path):
+                                os.remove(abs_path)
+                                print(f'del file: ’{abs_path}‘ successful !!!')
+                else:
+                    print(f'file dir ‘{last_model_save_path}’ is not exists !!!')
 
         # Evaluation
         if (
@@ -751,28 +739,19 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 100
-            evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=valid_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
-            neox_args.eval_iters = 500
-            evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=test_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
+            for i in range(3):
+                neox_args.eval_iters = valid_iters[i]
+                evaluate_and_print_results(
+                            neox_args=neox_args,
+                            prefix=prefix,
+                            forward_step_func=forward_step,
+                            data_iterator=valid_data_loaders[i],
+                            model=model,
+                            iteration=iteration,
+                            verbose=False,
+                            timers=timers,
+                            valid_type=valid_types[i]
+                        )
 
         if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
             torch.distributed.barrier()
@@ -876,6 +855,7 @@ def evaluate_and_print_results(
     iteration,
     verbose=False,
     timers=None,
+    valid_type='validation'
 ):
     """Helper function to evaluate and dump results on screen."""
     total_loss_dict = evaluate(
@@ -886,14 +866,14 @@ def evaluate_and_print_results(
         verbose=verbose,
         timers=timers,
     )
-    string = f" validation results at {prefix} | "
+    string = f" {valid_type} results at {prefix} | "
     for k, v in total_loss_dict.items():
         if isinstance(v, dict):
             for k2, v2 in v.items():
                 k3 = "_".join([k, k2])
                 string += f"{k3} value: {v2:.6E} | "
                 tb_wandb_log(
-                    f"validation/{k3}",
+                    f"{valid_type}/{k3}",
                     v2,
                     iteration,
                     use_wandb=neox_args.use_wandb,
@@ -902,7 +882,7 @@ def evaluate_and_print_results(
         else:
             string += f"{k} value: {v:.6E} | "
             tb_wandb_log(
-                f"validation/{k}",
+                f"{valid_type}/{k}",
                 v,
                 iteration,
                 use_wandb=neox_args.use_wandb,
