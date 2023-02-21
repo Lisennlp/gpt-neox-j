@@ -70,17 +70,6 @@ torch._C._jit_override_can_fuse_on_gpu(True)
 """
 
 
-token_len = 5800000
-def delsp(x, n, length_dim=2):
-    if x is None:
-        print(f'{n} is None')
-        return ''
-    if length_dim == 2:
-        print(f'{n}: {x[0, :token_len]}, sum: {x[0, :token_len].sum()} max: {x[0, :token_len].max()} min: {x[0, :token_len].min()} shape: {x[0].shape}\n')
-    else:
-        print(f'{n}: {x[0, :, :token_len]}, sum: {x[0, :, :token_len].sum()} max: {x[0, :, :token_len].max()} min: {x[0, :, :token_len].min()} shape: {x[0].shape}\n')
-
-
 class ParallelMLP(nn.Module):
     """MLP.
 

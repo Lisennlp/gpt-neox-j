@@ -135,35 +135,6 @@ def pretrain(neox_args):
     timers.log(["model and optimizer", "train/valid/test data iterators"])
 
     iteration = 0
-
-    prefix = "the start of training for val data"
-    print_rank_0('starting evaluating!!!')
-    neox_args.eval_iters = 151
-    evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=valid_data_iterator,
-            model=model,
-            iteration=iteration,
-            verbose=False,
-            timers=timers,
-        )
-    print_rank_0('starting test!!!')
-    neox_args.eval_iters = 272
-    evaluate_and_print_results(
-            neox_args=neox_args,
-            prefix=prefix,
-            forward_step_func=forward_step,
-            data_iterator=test_data_iterator,
-            model=model,
-            iteration=iteration,
-            verbose=False,
-            timers=timers,
-        )
-    if neox_args.only_eval:
-        exit(0)
-
     print_rank_0("training ...")
     if neox_args.do_train and neox_args.train_iters > 0:
         iteration = train(
@@ -431,17 +402,17 @@ def get_optimizer(model, neox_args):
                 )
                 raise Exception
         else:
-            # try:
+            try:
                 # default to apex as it's slightly faster，使用FuseAdam
-            #     from apex.optimizers import FusedAdam as Adam
-            #     print(f'优化器：apex的FuseAdam')
-            # except ImportError:
-            #     # if apex isn't installed, use deepspeed's FusedAdam
-            #     print(
-            #         "WARNING: APEX not installed - defaulting to deepspeed's fused adam"
-            #     )
-            from deepspeed.ops.adam import FusedAdam as Adam
-            print(f'优化器：deepspeed的FuseAdam')
+                from apex.optimizers import FusedAdam as Adam
+                print(f'优化器：apex的FuseAdam')
+            except ImportError:
+                # if apex isn't installed, use deepspeed's FusedAdam
+                print(
+                    "WARNING: APEX not installed - defaulting to deepspeed's fused adam"
+                )
+                from deepspeed.ops.adam import FusedAdam as Adam
+                print(f'优化器：deepspeed的FuseAdam')
             adam_optimizer = Adam
         optimizer = adam_optimizer(
             param_groups,
@@ -666,8 +637,6 @@ def train(
 
     # Turn on training mode which enables dropout.
     model.train()
-    # model.eval()
-
 
     # Tracking loss.
     total_loss_dict = {}
@@ -684,6 +653,28 @@ def train(
     # to monitor if we've skipped many iterations in a row and trigger an early exit
     overflow_monitor = OverflowMonitor(optimizer)
     iteration = 0
+
+
+    prefix = "iteration {}".format(iteration)
+    # 起始评测
+    valid_iters = [152, 163, 112] #  dev:   bench: 1298, meta: 891
+    valid_data_loaders = [valid_data_iterator, *test_data_iterator]
+    valid_types = ['meta_seen_dev', 'big_bench_test1', 'meta_unseen_test2']
+    for i in range(3):
+        neox_args.eval_iters = valid_iters[i]
+        evaluate_and_print_results(
+                    neox_args=neox_args,
+                    prefix=prefix,
+                    forward_step_func=forward_step,
+                    data_iterator=valid_data_loaders[i],
+                    model=model,
+                    iteration=iteration,
+                    verbose=False,
+                    timers=timers,
+                    valid_type=valid_types[i]
+                )
+    if neox_args.only_eval:
+        exit(0)
     while iteration < neox_args.train_iters:
         loss_dict, skipped_iter = train_step(
             neox_args=neox_args,
@@ -701,7 +692,6 @@ def train(
         # get learning rate (if present) - if doing soft prompt tuning + pipe parallel, you
         # may have no tunable parameters on a specific rank
         if optimizer.param_groups:
-            # optimizer.param_groups[0]["lr"] = 1e-10
             lr = optimizer.param_groups[0].get("lr", 0)
         else:
             lr = 0
@@ -735,6 +725,18 @@ def train(
                 optimizer=optimizer,
                 lr_scheduler=lr_scheduler,
             )
+            last_model_save_path = os.path.join(neox_args.save, f'global_step{iteration - 5000}')
+            if torch.distributed.get_rank() == 0:
+                if os.path.exists(last_model_save_path):
+                    last_model_files = os.listdir(last_model_save_path)
+                    for last_model_file in last_model_files:
+                        if 'zero' in last_model_file:
+                            abs_path = os.path.join(last_model_save_path, last_model_file)
+                            if os.path.exists(abs_path):
+                                os.remove(abs_path)
+                                print(f'del file: ’{abs_path}‘ successful !!!')
+                else:
+                    print(f'file dir ‘{last_model_save_path}’ is not exists !!!')
 
         # Evaluation
         if (
@@ -743,28 +745,19 @@ def train(
             and neox_args.do_valid
         ):
             prefix = "iteration {}".format(iteration)
-            neox_args.eval_iters = 151
-            evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=valid_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
-            neox_args.eval_iters = 272
-            evaluate_and_print_results(
-                neox_args=neox_args,
-                prefix=prefix,
-                forward_step_func=forward_step,
-                data_iterator=test_data_iterator,
-                model=model,
-                iteration=iteration,
-                verbose=False,
-                timers=timers,
-            )
+            for i in range(3):
+                neox_args.eval_iters = valid_iters[i]
+                evaluate_and_print_results(
+                            neox_args=neox_args,
+                            prefix=prefix,
+                            forward_step_func=forward_step,
+                            data_iterator=valid_data_loaders[i],
+                            model=model,
+                            iteration=iteration,
+                            verbose=False,
+                            timers=timers,
+                            valid_type=valid_types[i]
+                        )
 
         if neox_args.exit_interval and iteration % neox_args.exit_interval == 0:
             torch.distributed.barrier()
@@ -778,7 +771,6 @@ def train(
             sys.exit()
 
     return iteration
-
 
 def evaluate(
     neox_args, forward_step_fn, data_iterator, model, verbose=False, timers=None
@@ -867,6 +859,7 @@ def evaluate_and_print_results(
     iteration,
     verbose=False,
     timers=None,
+    valid_type='valid'
 ):
     """Helper function to evaluate and dump results on screen."""
     total_loss_dict = evaluate(
@@ -877,14 +870,14 @@ def evaluate_and_print_results(
         verbose=verbose,
         timers=timers,
     )
-    string = f" validation results at {prefix} | "
+    string = f" {valid_type} results at {prefix} | "
     for k, v in total_loss_dict.items():
         if isinstance(v, dict):
             for k2, v2 in v.items():
                 k3 = "_".join([k, k2])
                 string += f"{k3} value: {v2:.6E} | "
                 tb_wandb_log(
-                    f"validation/{k3}",
+                    f"{valid_type}/{k3}",
                     v2,
                     iteration,
                     use_wandb=neox_args.use_wandb,
@@ -893,7 +886,7 @@ def evaluate_and_print_results(
         else:
             string += f"{k} value: {v:.6E} | "
             tb_wandb_log(
-                f"validation/{k}",
+                f"{valid_type}/{k}",
                 v,
                 iteration,
                 use_wandb=neox_args.use_wandb,

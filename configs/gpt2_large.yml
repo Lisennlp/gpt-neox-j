@@ -44,7 +44,7 @@
   "num-layers": 36,
   "hidden-size": 1280,
   "num-attention-heads": 20,
-  "seq-length": 768,
+  "seq-length": 1024,
   "max-position-embeddings": 1024,
   "norm": "layernorm",
   "pos-emb": "learned", # @lsp
@@ -104,7 +104,7 @@
     "fp16": true,
     "enabled": true,
     "loss_scale": 0,
-    "loss_scale_window": 1000,
+    "loss_scale_window": 1250,
     "initial_scale_power": 0, #lsp 1 -> 0, 初始loss_scale 2 ** 0
     "hysteresis": 2,
     "min_loss_scale": 1
@@ -117,7 +117,7 @@
   "distributed-backend": "nccl",
   "lr-decay-style": "linear",
   "warmup": 0.0,
-  "save-interval": 5000,
+  "save-interval": 2500,
   "eval-interval": 500,
   "eval-iters": 100,
 
