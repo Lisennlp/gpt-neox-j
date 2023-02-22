@@ -24,8 +24,8 @@
   # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/eval",
   # "data-path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/filter2000/",
   # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/unseen_len768/eval",
-  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
-  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/meta_train",
+  "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/small",
+  # "data_path": "/nas2/lishengping/caiyun_projects/MetaICL/tensorized/meta_train",
   
   "only_eval": false,
   # Tokenizer /  checkpoint settings - you will need to change these to the location you have them saved in
@@ -83,7 +83,7 @@
 
   # batch / data settings (assuming 96 GPUs)
   "train_micro_batch_size_per_gpu": 1,
-  "gradient_accumulation_steps": 8,
+  "gradient_accumulation_steps": 1,
   "data-impl": "mmap",
   "split": "995,4,1",
 

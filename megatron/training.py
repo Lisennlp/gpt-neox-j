@@ -234,8 +234,15 @@ def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
     tokens = tokens_[:, :-1].contiguous()
 
     # loss_mask = data_b["token_type_ids"][:, 1:].bool()
-    loss_mask = data_b["token_type_ids"][:, :-1].bool()
-    attention_mask = data_b["attention_mask"][:, :-1].bool()
+    if "token_type_ids" in data_b:
+        loss_mask = data_b["token_type_ids"][:, :-1].bool()
+    else:
+        loss_mask = torch.zeros_like(tokens)
+
+    if "attention_mask" in data_b:
+        attention_mask = data_b["attention_mask"][:, :-1].bool()
+    else:
+        attention_mask = torch.ones_like(tokens)
 
     # Get the masks and position ids.
     position_ids = get_ltor_masks_and_position_ids_(
@@ -243,6 +250,12 @@ def _get_batch_icl(neox_args, tokenizer, keys, data, datatype):
         eod_token=0,
         eod_mask_loss=neox_args.eod_mask_loss,
     )
+    print(f'tokens.shape[1]: {tokens.shape[1]}')
+    print(f'labels.shape[1]: {labels.shape[1]}')
+    print(f'loss_mask.shape[1]: {loss_mask.shape[1]}')
+    print(f'attention_mask.shape[1]: {attention_mask.shape[1]}')
+    print(f'position_ids.shape[1]: {position_ids.shape[1]}')
+
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 
@@ -252,10 +265,10 @@ def get_batch_pipe(data, neox_args):
     datatype = torch.int64
     # @lsp
     if neox_args.icl_or_neo == 'icl':
-        keys = ["input_ids", 'attention_mask', 'token_type_ids']
+        keys = list(data.keys())
+        # keys = ["input_ids", 'attention_mask', 'token_type_ids']
         tokens, labels, loss_mask, attention_mask, position_ids = _get_batch_icl(
-        neox_args, neox_args.tokenizer, keys, data, datatype
-        )
+        neox_args, neox_args.tokenizer, keys, data, datatype)
         # loss_mask[:, :attention_mask.sum()] = 1
         attention_mask = torch.triu(attention_mask.new_ones(attention_mask.shape[1], attention_mask.shape[1]),
                                        diagonal=1).bool()[None,None,:, :]
@@ -658,21 +671,25 @@ def train(
     prefix = "iteration {}".format(iteration)
     # 起始评测
     valid_iters = [152, 163, 112] #  dev:   bench: 1298, meta: 891
+    valid_iters = [12, 13, 12] #  dev:   bench: 1298, meta: 891
+
     valid_data_loaders = [valid_data_iterator, *test_data_iterator]
     valid_types = ['meta_seen_dev', 'big_bench_test1', 'meta_unseen_test2']
-    for i in range(3):
+    for i in range(1):
         neox_args.eval_iters = valid_iters[i]
-        evaluate_and_print_results(
-                    neox_args=neox_args,
-                    prefix=prefix,
-                    forward_step_func=forward_step,
-                    data_iterator=valid_data_loaders[i],
-                    model=model,
-                    iteration=iteration,
-                    verbose=False,
-                    timers=timers,
-                    valid_type=valid_types[i]
-                )
+        generate_and_print_results(neox_args, model, valid_data_loaders[-1])
+        # evaluate_and_print_results(
+        #             neox_args=neox_args,
+        #             prefix=prefix,
+        #             forward_step_func=forward_step,
+        #             data_iterator=valid_data_loaders[i],
+        #             model=model,
+        #             iteration=iteration,
+        #             verbose=False,
+        #             timers=timers,
+        #             valid_type=valid_types[i]
+        #         )
+        exit(0)
     if neox_args.only_eval:
         exit(0)
     while iteration < neox_args.train_iters:
@@ -897,3 +914,56 @@ def evaluate_and_print_results(
     print_rank_0("-" * length)
     print_rank_0(string)
     print_rank_0("-" * length)
+
+
+def generate_and_print_results(neox_args, model, data):
+    model.eval()
+    iteration = 0
+    src_rank = model.grid.stage_to_global(model.num_stages - 1)
+    while iteration < 1:
+        if data is not None:
+            cur_batch = data[iteration]
+            input_ids = cur_batch['input_ids']
+            loss_mask = cur_batch['token_type_ids']
+            attention_mask = cur_batch['attention_mask']
+            mask_loc = torch.where(loss_mask == 1)[1]
+            mask_start = mask_loc[0] + 1 # 因为之后get_batch_icl还要去掉最后一个token
+            mask_end = mask_loc[-1] + 1
+            labels = input_ids[:, mask_start: mask_end]
+            # print(f'labels: {labels}')
+            input_id = input_ids[:, :mask_start + 1]
+            loss_mask = loss_mask[:, :mask_start + 1]
+            attention_mask = attention_mask[:, :mask_start + 1]
+            d = {"input_ids": input_id, "attention_mask": attention_mask, "token_type_ids": loss_mask}
+            # d = {"input_ids": input_id}
+            mask_start = torch.cuda.LongTensor([mask_start])
+        else:
+            mask_start = torch.cuda.LongTensor([1000])
+
+        torch.distributed.broadcast(tensor=mask_start, src=src_rank, group=mpu.get_pipe_parallel_group())
+        count = 0
+        generated_tokens = None
+        while mask_start < neox_args.seq_length:
+            if data is not None:
+                if generated_tokens is not None:
+                    d['input_ids'] = torch.cat([d['input_ids'], generated_tokens.view(1, 1).cpu()], dim=1)
+                    d['attention_mask'] = torch.cat([d['attention_mask'], torch.tensor([[1]])], dim=1)
+                    d['token_type_ids'] = torch.cat([d['token_type_ids'], torch.tensor([[1]])], dim=1)
+                model_inputs = iter([d])
+            else:
+                model_inputs = None
+            with torch.no_grad():
+                loss, logits = model.eval_batch(model_inputs, return_logits=True)
+            if logits is not None:  # if pipe parallel, not all ranks return logits
+                generated_token_logits = logits[:, -1].contiguous()  # [bs, seq, vocab_size] -> [bs, vocab_size]
+                generated_tokens = torch.argmax(generated_token_logits, dim=-1).view(-1)
+                generated_tokens = torch.cuda.LongTensor(generated_tokens)
+            else:
+                generated_tokens = torch.cuda.LongTensor([0])
+            torch.distributed.broadcast(tensor=generated_tokens, src=src_rank, group=mpu.get_pipe_parallel_group())
+            print(f'generated_tokens: {generated_tokens}')
+            if generated_tokens.item() == 628 or generated_tokens.item() == 198 or count > 20:
+                break
+            mask_start += 1
+            count += 1
+        iteration += 1

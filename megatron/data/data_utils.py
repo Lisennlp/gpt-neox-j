@@ -572,4 +572,4 @@ def metaicl_dataloader(neox_args):
     else:
         test2_data_iterator = None
 
-    return train_data_iterator, valid_data_iterator, (test1_data_iterator, test2_data_iterator)
+    return train_data_iterator, valid_data_iterator, (test1_data_iterator, test2_data_iterator, test1_dataloader)
