@@ -64,8 +64,10 @@ def cross_entropy(output, labels, _fp16=False, pred_results_dir=None):
         return loss
     """
     # train和eval都是使用的这个loss函数
+    
     global count
     labels, loss_mask = labels[0], labels[1]
+    print(f'output: {output} labels: {labels}')
     if _fp16:
         assert output.dtype == torch.half and loss_mask.dtype == torch.half
         # preds: bsz x len, losses: bsz x len
